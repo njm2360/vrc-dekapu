@@ -235,6 +235,10 @@ def main():
                 instance_info_list = []
 
                 for group_instance in group_instances:
+                    # でかプ以外のワールドが建ってるかもしれない
+                    if group_instance["world"]["id"] != DEKAPU_WORLD_ID:
+                        continue
+
                     instance_id: str = group_instance["instanceId"]
                     instance_info: dict = get_instance_info(
                         DEKAPU_WORLD_ID, instance_id
