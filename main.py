@@ -3,17 +3,25 @@ import json
 import sys
 import time
 import pyotp
+import logging
 import requests
 from requests.auth import HTTPBasicAuth
 from dotenv import load_dotenv
 
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(filename)s:%(lineno)d] [%(levelname)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+
 load_dotenv()
 
-username = os.getenv("USERNAME")
+username = os.getenv("ID")
 password = os.getenv("PASSWORD")
 totp_secret = os.getenv("TOTP_SECRET")
 user_id = os.getenv("USER_ID")
-
+patlite_ip = os.getenv("PATLITE_IP")
 
 BASE_URL = "https://api.vrchat.cloud/api/1"
 COOKIE_FILE = "cookie.json"
@@ -33,14 +41,12 @@ def has_cookie(domain: str, name: str) -> bool:
     now = time.time()
     for cookie in session.cookies:
         if cookie.domain == domain and cookie.name == name:
-            # 有効期限が設定されていない場合は有効とみなす
             if cookie.expires is None:
                 return True
-            # 有効期限が現在時刻より後であれば有効
             if cookie.expires > now:
                 return True
             else:
-                print(
+                logging.warning(
                     f"Cookie '{name}' for '{domain}' has expired at {time.ctime(cookie.expires)}"
                 )
     return False
@@ -89,15 +95,15 @@ def login(username: str, password: str) -> bool:
 
         if "requiresTwoFactorAuth" in data:
             if "totp" not in data["requiresTwoFactorAuth"]:
-                print("TOTP is not required.")
+                logging.error("TOTP is not required.")
                 return False
         else:
-            print("No requiresTwoFactorAuth field in response.")
+            logging.error("No requiresTwoFactorAuth field in response.")
             return False
 
         auth_cookie = response.cookies.get("auth")
         if not auth_cookie:
-            print("Auth cookie not found.")
+            logging.error("Auth cookie not found.")
             return False
 
         totp = pyotp.TOTP(totp_secret.replace(" ", ""))
@@ -111,17 +117,17 @@ def login(username: str, password: str) -> bool:
         verify_data = response.json()
 
         if not verify_data.get("verified"):
-            print("TOTP verification failed.")
+            logging.error("TOTP verification failed.")
             return False
 
         return True
 
     except requests.HTTPError as http_err:
-        print(f"HTTP error occurred: {http_err}")
+        logging.error(f"HTTP error occurred: {http_err}")
     except ValueError as json_err:
-        print(f"JSON decoding error: {json_err}")
+        logging.error(f"JSON decoding error: {json_err}")
     except Exception as err:
-        print(f"Unexpected error: {err}")
+        logging.error(f"Unexpected error: {err}")
     return False
 
 
@@ -131,7 +137,7 @@ def get_user_info(user_id: str):
     )
     response.raise_for_status()
 
-    # print(json.dumps(response.json(), indent=2, ensure_ascii=False))
+    logging.debug(json.dumps(response.json(), indent=2, ensure_ascii=False))
 
     return response.json()
 
@@ -142,7 +148,7 @@ def get_group_instances(group_id: str):
     )
     response.raise_for_status()
 
-    # print(json.dumps(response.json(), indent=2, ensure_ascii=False))
+    logging.debug(json.dumps(response.json(), indent=2, ensure_ascii=False))
 
     return response.json()
 
@@ -153,7 +159,7 @@ def get_instance_info(world_id: str, instance_id: str):
     )
     response.raise_for_status()
 
-    # print(json.dumps(response.json(), indent=2, ensure_ascii=False))
+    logging.debug(json.dumps(response.json(), indent=2, ensure_ascii=False))
 
     return response.json()
 
@@ -164,7 +170,7 @@ def get_group_posts(group_id: str):
     )
     response.raise_for_status()
 
-    # print(json.dumps(response.json(), indent=2, ensure_ascii=False))
+    logging.debug(json.dumps(response.json(), indent=2, ensure_ascii=False))
 
     return response.json()
 
@@ -175,9 +181,21 @@ def invite_myself(world_id: str, instance_id: str):
     )
     response.raise_for_status()
 
-    # print(json.dumps(response.json(), indent=2, ensure_ascii=False))
+    logging.debug(json.dumps(response.json(), indent=2, ensure_ascii=False))
 
     return response.json()
+
+
+def alert_patlite():
+    # NHV4/6 HTTPコマンド受信機能互換
+    if patlite_ip is None:
+        return
+
+    response = session.get(
+        f"http://{patlite_ip}/api/control",
+        params={"alert": "200001"},  # 赤色:パターン1 ブザー:パターン1
+    )
+    response.raise_for_status()
 
 
 def main():
@@ -188,62 +206,85 @@ def main():
     try:
         while True:
             try:
-                # 0. VRChatにログイン
                 if not has_cookie("api.vrchat.cloud", "auth"):
                     if not login(username, password):
-                        print("❌️ ログインに失敗しました")
+                        logging.error("❌️ ログインに失敗しました")
                         sys.exit(-1)
 
-                # 1. 現在のワールドがでかプかどうかチェック
                 user_info = get_user_info(user_id)
                 current_world_id = user_info["worldId"]
                 current_instance_id = user_info["instanceId"]
 
                 if current_instance_id == "traveling":
-                    print("⚠️ 移動中です")
+                    logging.warning("⚠️ 移動中です")
                     traveling_count += 1
+                    # 無限Joining検知
                     if traveling_count >= 2:
-                        print("❌️ 移動時間が長すぎます: NG")
+                        logging.error("❌️ 移動時間が長すぎます: NG")
+                        alert_patlite()
                 elif current_world_id == DEKAPU_WORLD_ID:
-                    print("✅ 現在ワールドチェック: OK")
+                    logging.info("✅ 現在ワールドチェック: OK")
                     traveling_count = 0
                 else:
-                    print("❌️ 現在ワールドチェック: NG")
+                    logging.error("❌️ 現在ワールドチェック: NG")
+                    alert_patlite()
                     traveling_count = 0
 
-                # 2. Groupインスタンス内で最多人数のインスタンスに居るかどうかチェック
                 group_instances = get_group_instances(DEKAPU_GROUP_ID)
 
-                most_populated_instance = None
-                max_users = -1
+                instance_info_list = []
 
                 for group_instance in group_instances:
                     instance_id: str = group_instance["instanceId"]
-
                     instance_info: dict = get_instance_info(
                         DEKAPU_WORLD_ID, instance_id
                     )
                     user_count = instance_info.get("userCount", 0)
                     name = instance_info.get("name")
-
-                    print(
-                        f"Instance Name: {name} Users: {user_count}"
+                    instance_info_list.append(
+                        {
+                            "instanceId": instance_id,
+                            "userCount": user_count,
+                            "name": name,
+                        }
                     )
 
-                    if user_count > max_users:
-                        max_users = user_count
-                        most_populated_instance = instance_id
+                    logging.debug(f"Instance Name: {name} Users: {user_count}")
+
+                # 最多人数のインスタンスを決定
+                most_populated = max(
+                    instance_info_list, key=lambda x: x["userCount"], default=None
+                )
+                most_populated_instance = (
+                    most_populated["instanceId"] if most_populated else None
+                )
 
                 if current_instance_id == most_populated_instance:
-                    print("✅ 現在のインスタンスは最多人数のインスタンスです")
+                    logging.info("✅ 現在のインスタンスは最多人数のインスタンスです")
                 else:
-                    print("⚠️ 現在のインスタンスは最多人数のインスタンスではありません")
+                    logging.warning(
+                        "⚠️ 現在のインスタンスは最多人数のインスタンスではありません"
+                    )
+
+                    # 人数が多い順に現在のインスタンス一覧を表示
+                    sorted_instances = sorted(
+                        instance_info_list, key=lambda x: x["userCount"], reverse=True
+                    )
+                    for inst in sorted_instances:
+                        logging.info(
+                            f"📌 Instance Name: {inst['name']}, Users: {inst['userCount']}"
+                        )
+
                     invite_myself(DEKAPU_WORLD_ID, most_populated_instance)
+                    alert_patlite()
 
             except Exception as e:
-                print(e)
+                logging.exception(e)
 
             time.sleep(60)
+
+    except KeyboardInterrupt:
+        pass
 
     finally:
         save_cookies_to_json()

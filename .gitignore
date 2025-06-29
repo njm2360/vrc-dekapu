@@ -1,3 +1,6 @@
 .venv/
+build/
+dist/
 .env
+*.spec
 cookie.json
