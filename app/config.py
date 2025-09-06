@@ -21,6 +21,7 @@ class Config:
         self.password: str = self._require_env("PASSWORD")
         self.totp_secret: str = self._require_env("TOTP_SECRET")
         self.user_id: str = self._require_env("USER_ID")
+        self.profile: int = int(os.getenv("PROFILE", 0))
         self.patlite_ip: Optional[str] = os.getenv("PATLITE_IP")
 
     @staticmethod
