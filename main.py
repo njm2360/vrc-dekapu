@@ -8,7 +8,7 @@ import requests
 from requests.auth import HTTPBasicAuth
 from dotenv import load_dotenv
 
-
+# ログ設定
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(filename)s:%(lineno)d] [%(levelname)s] %(message)s",
@@ -37,10 +37,11 @@ session.headers.update(
 )
 
 
+# Cookieが存在し、有効期限内かどうかを確認する
 def has_cookie(domain: str, name: str) -> bool:
     now = time.time()
     for cookie in session.cookies:
-        if cookie.domain == domain and cookie.name == name:
+        if cookie.domain.lstrip(".") == domain and cookie.name == name:
             if cookie.expires is None:
                 return True
             if cookie.expires > now:
@@ -52,6 +53,7 @@ def has_cookie(domain: str, name: str) -> bool:
     return False
 
 
+# CookieをJSONファイルに保存する
 def save_cookies_to_json():
     cookies = []
     for cookie in session.cookies:
@@ -69,6 +71,7 @@ def save_cookies_to_json():
         json.dump(cookies, f)
 
 
+# CookieをJSONファイルから読み込む
 def load_cookies_from_json():
     if os.path.exists(COOKIE_FILE):
         with open(COOKIE_FILE, "r") as f:
@@ -84,6 +87,7 @@ def load_cookies_from_json():
                 )
 
 
+# ログイン処理
 def login(username: str, password: str) -> bool:
     try:
         response = session.get(
@@ -131,6 +135,7 @@ def login(username: str, password: str) -> bool:
     return False
 
 
+# ユーザー情報を取得
 def get_user_info(user_id: str):
     response = session.get(
         f"{BASE_URL}/users/{user_id}",
@@ -142,6 +147,7 @@ def get_user_info(user_id: str):
     return response.json()
 
 
+# グループのインスタンス一覧を取得
 def get_group_instances(group_id: str):
     response = session.get(
         f"{BASE_URL}/groups/{group_id}/instances",
@@ -153,6 +159,7 @@ def get_group_instances(group_id: str):
     return response.json()
 
 
+# インスタンスの詳細情報を取得
 def get_instance_info(world_id: str, instance_id: str):
     response = session.get(
         f"{BASE_URL}/instances/{world_id}:{instance_id}",
@@ -164,6 +171,7 @@ def get_instance_info(world_id: str, instance_id: str):
     return response.json()
 
 
+# グループの投稿一覧を取得
 def get_group_posts(group_id: str):
     response = session.get(
         f"{BASE_URL}/groups/{group_id}/posts",
@@ -175,6 +183,7 @@ def get_group_posts(group_id: str):
     return response.json()
 
 
+# 自分を指定したインスタンスに招待
 def invite_myself(world_id: str, instance_id: str):
     response = session.post(
         f"{BASE_URL}/invite/myself/to/{world_id}:{instance_id}",
@@ -194,6 +203,7 @@ def alert_patlite():
     response = session.get(
         f"http://{patlite_ip}/api/control",
         params={"alert": "200001"},  # 赤色:パターン1 ブザー:パターン1
+        verify=False,
     )
     response.raise_for_status()
 
@@ -206,6 +216,7 @@ def main():
     try:
         while True:
             try:
+                # Cookieが無い、または期限切れの場合はログインを試みる
                 if not has_cookie("api.vrchat.cloud", "auth"):
                     if not login(username, password):
                         logging.error("❌️ ログインに失敗しました")
@@ -255,7 +266,7 @@ def main():
 
                     logging.debug(f"Instance Name: {name} Users: {user_count}")
 
-                # 最多人数のインスタンスを決定
+                # 最多人数のインスタンスを特定
                 most_populated = max(
                     instance_info_list, key=lambda x: x["userCount"], default=None
                 )
@@ -269,18 +280,25 @@ def main():
                     logging.warning(
                         "⚠️ 現在のインスタンスは最多人数のインスタンスではありません"
                     )
-
-                    # 人数が多い順に現在のインスタンス一覧を表示
-                    sorted_instances = sorted(
-                        instance_info_list, key=lambda x: x["userCount"], reverse=True
-                    )
-                    for inst in sorted_instances:
-                        logging.info(
-                            f"📌 Instance Name: {inst['name']}, Users: {inst['userCount']}"
-                        )
-
                     invite_myself(DEKAPU_WORLD_ID, most_populated_instance)
                     alert_patlite()
+
+                # 人数が多い順に現在のインスタンス一覧を表示
+                sorted_instances = sorted(
+                    instance_info_list, key=lambda x: x["userCount"], reverse=True
+                )
+                for inst in sorted_instances:
+                    logging.info(
+                        f"📌 Instance Name: {inst['name']}, Users: {inst['userCount']}"
+                    )
+
+            except requests.HTTPError as e:
+                if e.response is not None and e.response.status_code == 401:
+                    logging.warning("⚠️ 認証エラーが発生しました。再ログインします。")
+                    if not login(username, password):
+                        logging.error("❌ ログインに失敗しました")
+                        sys.exit(-1)
+                    continue  # 再試行
 
             except Exception as e:
                 logging.exception(e)
