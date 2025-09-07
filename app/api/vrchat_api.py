@@ -5,7 +5,7 @@ import requests
 from app.config import Config
 from app.http import HttpClient
 from app.auth import AuthManager
-from app.model.vrchat import UserInfo, GroupInstance, InstanceInfo
+from app.model.vrchat import UserInfo, GroupInstance, InstanceInfo, WorldsInfo
 
 
 class VRChatAPI:
@@ -55,8 +55,17 @@ class VRChatAPI:
         )
         return resp.json()
 
-    def invite_myself(self, world_id: str, instance_id: str) -> dict:
+    def invite_myself(self, instance_info: InstanceInfo) -> dict:
         resp = self._request_with_relogin(
-            "POST", f"{self.config.BASE_URL}/invite/myself/to/{world_id}:{instance_id}"
+            "POST",
+            f"{self.config.BASE_URL}/invite/myself/to/{instance_info.world_id}:{instance_info.instance_id}",
         )
         return resp.json()
+
+    def get_worlds(self, world_id: str) -> WorldsInfo:
+        resp = self._request_with_relogin(
+            "GET", f"{self.config.BASE_URL}/worlds/{world_id}"
+        )
+        data = resp.json()
+        logging.debug(json.dumps(data, indent=2, ensure_ascii=False))
+        return WorldsInfo(**data)

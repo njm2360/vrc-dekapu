@@ -8,16 +8,19 @@ from app.model.vrchat import InstanceInfo
 
 class VRCLauncher:
     VRCHAT_PATH = Path(
-        r"C:/Program Files (x86)/Steam/steamapps/common/VRChat/VRChat.exe"
+        r"C:/Program Files (x86)/Steam/steamapps/common/VRChat/launch.exe"
     )
 
     def __init__(self, vrchat_path: Path = VRCHAT_PATH):
         self.vrchat_path = vrchat_path
 
+        if not self.vrchat_path.exists():
+            raise FileNotFoundError(f"VRChat executable not found at {self.vrchat_path}")
+
     def launch(
         self,
         instance: Optional[InstanceInfo] = None,
-        no_vr: Optional[bool] = None,
+        no_vr: Optional[bool] = True,
         profile: Optional[int] = None,
         osc: Optional[str] = None,  # (inPort:outIP:outPort)
         fps: Optional[int] = None,
@@ -26,21 +29,30 @@ class VRCLauncher:
 
         if instance:
             args.append(self.build_launch_url(instance))
+        if osc:
+            args.append(f"--osc={osc}")
         if profile:
             args.append(f"--profile={profile}")
         if no_vr:
             args.append("--no-vr")
-        if osc:
-            args.append(f"--osc={osc}")
         if fps:
             args.append(f"--fps={fps}")
 
-        logging.info(f"Launching VRChat: {args}")
+        logging.debug(f"Launching VRChat: {args}")
         try:
             subprocess.Popen(args)
         except Exception as e:
             logging.error(f"Failed to launch VRChat: {e}")
 
     @staticmethod
+    def is_running() -> bool:
+        try:
+            tasks = subprocess.check_output("tasklist", text=True)
+            return "VRChat.exe" in tasks
+        except Exception as e:
+            logging.error(f"Failed to check if VRChat is running: {e}")
+            return False
+
+    @staticmethod
     def build_launch_url(instance: InstanceInfo) -> str:
-        return f"vrchat://launch?ref=VRCQuickLauncher&id={instance.location}&shortName={instance.secureName}"
+        return f"vrchat://launch?ref=VRCQuickLauncher&id={instance.location}&shortName={instance.short_name}"
