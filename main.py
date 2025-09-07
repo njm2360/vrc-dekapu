@@ -1,12 +1,11 @@
 import sys
 import time
 import logging
-from typing import Optional
 
 from app.config import Config
 from app.http import HttpClient
 from app.auth import AuthManager
-from app.model.vrchat import InstanceInfo, UserState
+from app.model.vrchat import InstanceInfo, InstanceType, UserState
 from app.api.vrchat_api import VRChatAPI
 from app.api.patlite_api import PatliteAPI, LightPattern, BuzzerPattern
 from app.util.launcher import VRCLauncher
@@ -39,8 +38,9 @@ def main():
                     logging.error("❌️ ログインに失敗しました")
                     sys.exit(-1)
 
-                # グループインスタンスの詳細を取得（でかプのみ）
+                # グループインスタンスの詳細を取得
                 group_instances = vrc_api.get_group_instances(Config.DEKAPU_GROUP_ID)
+
                 group_instance_info: list[InstanceInfo] = [
                     vrc_api.get_instance_info(Config.DEKAPU_WORLD_ID, gi.instance_id)
                     for gi in group_instances
@@ -55,30 +55,28 @@ def main():
                 # ユーザー情報を取得
                 user_info = vrc_api.get_user_info(cfg.user_id)
 
-                # オフラインかつVRChat未起動なら自動起動
-                if user_info.state != UserState.ONLINE and not launcher.is_running():
-                    # グループ内でJoin可能なインスタンス
+                # オフラインなら自動起動
+                if user_info.state != UserState.ONLINE:
+                    # Note: フルインスタンスは指定不可、引数で指定してもVRChat Homeに飛ぶ
+
+                    # グループ内でJoin可能なインスタンスを探索
+                    candidates = [
+                        i for i in group_instance_info
+                        if i.user_count < i.world.capacity - 1  # マージン
+                    ]
+
                     joinable_instance = max(
-                        (
-                            i
-                            for i in group_instance_info
-                            if i.user_count < i.world.capacity
-                        ),
+                        candidates,
                         key=lambda x: x.user_count,
                         default=None,
                     )
 
-                    # 無ければPublicワールドから探索
+                    # 無ければPublicからJoin可能なインスタンスを探索
                     if joinable_instance is None:
-                        group_instance_ids = {gi.instance_id for gi in group_instances}
+                        worlds = vrc_api.get_worlds(Config.DEKAPU_WORLD_ID)
+
                         sorted_world_entries = sorted(
-                            (
-                                w
-                                for w in vrc_api.get_worlds(
-                                    Config.DEKAPU_WORLD_ID
-                                ).instances
-                                if w.instance_id not in group_instance_ids
-                            ),
+                            worlds.instances,
                             key=lambda w: w.user_count,
                             reverse=True,
                         )
@@ -87,7 +85,9 @@ def main():
                             info = vrc_api.get_instance_info(
                                 Config.DEKAPU_WORLD_ID, entry.instance_id
                             )
-                            if info.user_count < info.world.capacity:
+                            if info.type != InstanceType.PUBLIC: # Public以外は除外
+                                continue
+                            if info.user_count < info.world.capacity - 1: # マージン
                                 joinable_instance = info
                                 break
 

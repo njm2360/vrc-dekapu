@@ -18,6 +18,20 @@ class ReleaseStatus(Enum):
     ALL = "all"
 
 
+class InstanceType(Enum):
+    PUBLIC = "public"
+    HIDDEN = "hidden"
+    FRIENDS = "friends"
+    PRIVATE = "private"
+    GROUP = "group"
+
+
+class GroupInstanceType(Enum):
+    PUBLIC = "public"
+    PLUS = "plus"
+    MEMBER = "members"
+
+
 class InstanceEntry(BaseModel):
     instance_id: str
     user_count: int
@@ -93,6 +107,10 @@ class InstanceInfo(BaseModel):
     id: str  # インスタンスID(wrld+instance)
     name: str  # インスタンス番号
     location: str  # ロケーション
+    type: InstanceType  # インスタンスの種類
+    group_instance_type: Optional[GroupInstanceType] = Field(
+        None, alias="groupInstanceType"
+    )  # グループインスタンスの種類
     instance_id: str = Field(..., alias="instanceId")  # インスタンスID(wrld+instance)
     short_name: str = Field(..., alias="secureName")  # 短縮名 (APIではsecureName,バグ?)
     user_count: int = Field(..., alias="userCount")  # 現在のユーザー数
@@ -101,22 +119,31 @@ class InstanceInfo(BaseModel):
     region: str  # リージョン
     tags: list[str]  # タグ
     closed_at: Optional[datetime] = Field(None, alias="closedAt")
-    world: WorldInfo # ワールド情報
+    world: WorldInfo  # ワールド情報
     world_id: str = Field(..., alias="worldId")  # ワールドID
+    owner_id: Optional[str] = Field(
+        None, alias="ownerId"
+    )  # オーナーのID(Public -> None, Group -> groupId)
 
 
 class GroupInstance(BaseModel):
-    instance_id: str = Field(..., alias="instanceId") # インスタンスID
-    location: str # ロケーション
-    member_count: int = Field(..., alias="memberCount") # グループメンバー数(userCountではない)
-    world: WorldInfo # ワールド情報
+    instance_id: str = Field(..., alias="instanceId")  # インスタンスID
+    location: str  # ロケーション
+    member_count: int = Field(
+        ..., alias="memberCount"
+    )  # グループメンバー数(userCountではない)
+    world: WorldInfo  # ワールド情報
 
 
 class WorldsInfo(WorldInfo):
-    occupants: int # 現在の総ユーザー数
-    private_occupants: int = Field(..., alias="privateOccupants") # プライベートインスタンスのユーザー数
-    public_occupants: int = Field(..., alias="publicOccupants") # パブリックインスタンスのユーザー数
-    instances: list[InstanceEntry] # インスタンス一覧
+    occupants: int  # 現在の総ユーザー数
+    private_occupants: int = Field(
+        ..., alias="privateOccupants"
+    )  # プライベートインスタンスのユーザー数
+    public_occupants: int = Field(
+        ..., alias="publicOccupants"
+    )  # パブリックインスタンスのユーザー数
+    instances: list[InstanceEntry]  # インスタンス一覧
 
     @field_validator("instances", mode="before")
     @classmethod
