@@ -22,7 +22,7 @@ http = HttpClient(cfg)
 auth = AuthManager(http, cfg)
 pl_api = PatliteAPI(http, cfg)
 vrc_api = VRChatAPI(http, auth, cfg)
-launcher = VRCLauncher()
+launcher = VRCLauncher(profile=cfg.profile)
 
 
 def main():
@@ -55,7 +55,7 @@ def main():
                 # ユーザー情報を取得
                 user_info = vrc_api.get_user_info(cfg.user_id)
 
-                # オフラインなら自動起動
+                # オンラインでない場合の処理 (VRChatアプリ落ち、ロスコネ対策)
                 if user_info.state != UserState.ONLINE:
                     # Note: フルインスタンスは指定不可、引数で指定してもVRChat Homeに飛ぶ
 
@@ -91,7 +91,10 @@ def main():
                                 joinable_instance = info
                                 break
 
-                    logging.info("User is offline. Launching VRChat...")
+                    # 既にVRChatが起動しているなら終了(Persistenceセーブのため)
+                    if launcher.is_running:
+                        launcher.terminate()
+
                     launcher.launch(joinable_instance, profile=cfg.profile)
 
                 # 無限Joining対策

@@ -14,6 +14,7 @@
 - PASSWORD
 - TOTP_SECRET
 - USER_ID
+- PROFILE
 
 ## 免責事項
 
