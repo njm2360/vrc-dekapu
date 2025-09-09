@@ -1,34 +1,33 @@
 from enum import IntEnum
 from typing import Optional
 
-from app.config import Config
 from app.http import HttpClient
 
 
 class LightPattern(IntEnum):
-    OFF = 0          # 消灯
-    ON = 1           # 点灯
-    BLINK1 = 2       # 点滅パターン1
-    BLINK2 = 3       # 点滅パターン2
-    BLINK3 = 4       # 点滅パターン3
-    BLINK4 = 5       # 点滅パターン4
-    KEEP = 9         # 変化なし
+    OFF = 0  # 消灯
+    ON = 1  # 点灯
+    BLINK1 = 2  # 点滅パターン1
+    BLINK2 = 3  # 点滅パターン2
+    BLINK3 = 4  # 点滅パターン3
+    BLINK4 = 5  # 点滅パターン4
+    KEEP = 9  # 変化なし
 
 
 class BuzzerPattern(IntEnum):
-    SILENT = 0       # 非吹鳴
-    PATTERN1 = 1     # 吹鳴パターン1
-    PATTERN2 = 2     # 吹鳴パターン2
-    PATTERN3 = 3     # 吹鳴パターン3
-    PATTERN4 = 4     # 吹鳴パターン4
-    PATTERN5 = 5     # 吹鳴パターン5
-    KEEP = 9         # 変化なし
+    SILENT = 0  # 非吹鳴
+    PATTERN1 = 1  # 吹鳴パターン1
+    PATTERN2 = 2  # 吹鳴パターン2
+    PATTERN3 = 3  # 吹鳴パターン3
+    PATTERN4 = 4  # 吹鳴パターン4
+    PATTERN5 = 5  # 吹鳴パターン5
+    KEEP = 9  # 変化なし
 
 
 class PatliteAPI:
-    def __init__(self, http: HttpClient, config: Config) -> None:
+    def __init__(self, http: HttpClient, ip_address: Optional[str] = None) -> None:
         self.http = http
-        self.config = config
+        self.ip_address = ip_address
 
     def control(
         self,
@@ -39,13 +38,13 @@ class PatliteAPI:
         c: Optional[LightPattern] = None,
         bz: Optional[BuzzerPattern] = None,
     ) -> None:
-        if self.config.patlite_ip is None:
+        if self.ip_address is None:
             return
 
         pattern = self._build_pattern(r, y, g, b, c, bz)
         resp = self.http.request(
             "GET",
-            f"http://{self.config.patlite_ip}/api/control",
+            f"http://{self.ip_address}/api/control",
             params={"alert": pattern},
             verify=False,
         )
