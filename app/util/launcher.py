@@ -32,15 +32,22 @@ class VRCLauncher:
                 f"VRChat executable not found at {self.vrchat_path}"
             )
 
+        matched_pids = []
         for proc in psutil.process_iter(attrs=["pid", "name", "cmdline"]):
             if proc.info["name"] == self.VRCHAT_PROC_NAME:
                 cmdline = proc.info.get("cmdline") or []
                 if f"--profile={self.profile}" in cmdline:
-                    self.vrc_pid = proc.info["pid"]
-                    logging.info(
-                        f"Found existing VRChat process for profile No.{self.profile} (PID={self.vrc_pid})"
-                    )
-                    break
+                    matched_pids.append(proc.info["pid"])
+
+        if len(matched_pids) == 1:
+            self.vrc_pid = matched_pids[0]
+            logging.info(
+                f"Found existing VRChat process for profile No.{self.profile} (PID={self.vrc_pid})"
+            )
+        elif len(matched_pids) > 1:
+            raise RuntimeError(
+                f"Multiple VRChat processes found for profile No.{self.profile}: {matched_pids}"
+            )
 
     def launch(
         self,
@@ -74,7 +81,7 @@ class VRCLauncher:
             try:
                 subprocess.run(["taskkill", "/PID", str(self.vrc_pid)])
                 psutil.Process(self.vrc_pid).wait(timeout=10)
-                logging.info(f"VRChat process (PID={self.vrc_pid}) terminated")
+                logging.debug(f"VRChat process (PID={self.vrc_pid}) terminated")
             except Exception as e:
                 logging.error(f"Failed to terminate VRChat: {e}")
             finally:

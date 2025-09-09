@@ -47,7 +47,7 @@ def main():
                     if gi.world.id == Config.DEKAPU_WORLD_ID
                 ]
 
-                # Invite送信用：グループ内で最多人数のインスタンスを求める
+                # Invite送信用：グループ内で最多人数のインスタンスを探索
                 most_populated = max(
                     group_instance_info, key=lambda x: x.user_count, default=None
                 )
@@ -55,13 +55,14 @@ def main():
                 # ユーザー情報を取得
                 user_info = vrc_api.get_user_info(cfg.user_id)
 
-                # オンラインでない場合の処理 (VRChatアプリ落ち、ロスコネ対策)
+                # オンラインでない場合 (VRChatアプリ落ち、ロスコネ対策)
                 if user_info.state != UserState.ONLINE:
                     # Note: フルインスタンスは指定不可、引数で指定してもVRChat Homeに飛ぶ
 
                     # グループ内でJoin可能なインスタンスを探索
                     candidates = [
-                        i for i in group_instance_info
+                        i
+                        for i in group_instance_info
                         if i.user_count < i.world.capacity - 1  # マージン
                     ]
 
@@ -85,19 +86,25 @@ def main():
                             info = vrc_api.get_instance_info(
                                 Config.DEKAPU_WORLD_ID, entry.instance_id
                             )
-                            if info.type != InstanceType.PUBLIC: # Public以外は除外
+                            if info.type != InstanceType.PUBLIC:  # Public以外は除外
                                 continue
-                            if info.user_count < info.world.capacity - 1: # マージン
+                            if info.user_count < info.world.capacity - 1:  # マージン
                                 joinable_instance = info
                                 break
 
                     # 既にVRChatが起動しているなら終了(Persistenceセーブのため)
+                    # Note: 閉じておかないと古いPersistenceデータが復元されてしまう
                     if launcher.is_running:
+                        logging.info(
+                            "VRChat is running. Closing the app to persistence save..."
+                        )
                         launcher.terminate()
 
-                    launcher.launch(joinable_instance, profile=cfg.profile)
+                    logging.info("🚀Launching VRChat...")
+                    launcher.launch(instance=joinable_instance)
 
                 # 無限Joining対策
+                # Note: 無限Joining発生中はワールド滞在扱いになりTravellingにならないため意味があまりない
                 if user_info.traveling_to_location is not None:
                     logging.warning("⚠️ Travelling...")
                     traveling_count += 1
