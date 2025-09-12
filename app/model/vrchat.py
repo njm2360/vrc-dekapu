@@ -65,6 +65,9 @@ class UserInfo(BaseModel):
         "traveling_to_instance",
         "traveling_to_location",
         "traveling_to_world",
+        "instance_id",
+        "location",
+        "world_id",
         mode="before",
     )
     @classmethod

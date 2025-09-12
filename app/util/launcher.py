@@ -13,11 +13,34 @@ from dataclasses import dataclass
 from app.model.vrchat import InstanceInfo
 
 
-@dataclass
+@dataclass(frozen=True)
 class OscConfig:
     in_port: int
     out_ip: str
     out_port: int
+
+
+@dataclass(frozen=True)
+class LaunchOptions:
+    instance: Optional[InstanceInfo] = None
+    no_vr: bool = True
+    fps: Optional[int] = None
+    midi: Optional[str] = None
+    osc: Optional[OscConfig] = None
+    affinity: Optional[str] = None
+    process_priority: Optional[str] = None
+    watch_worlds: bool = False
+    watch_avatars: bool = False
+    debug_gui: bool = False
+    sdk_log_levels: bool = False
+    udon_debug_logging: bool = False
+    extra_args: Optional[list[str]] = None
+
+
+@dataclass(frozen=True)
+class ProcessIdentity:
+    pid: int
+    create_time: float
 
 
 class VRCLauncher:
@@ -25,148 +48,226 @@ class VRCLauncher:
         r"C:/Program Files (x86)/Steam/steamapps/common/VRChat/launch.exe"
     )
     VRCHAT_PROC_NAME: Final[str] = "VRChat.exe"
+    LAUNCH_TIMEOUT: Final[int] = 30
 
-    def __init__(self, profile: int, vrchat_path: Path = LAUNCHER_PATH):
-        self.vrchat_path = vrchat_path
-        self.profile = profile
-        self.vrc_pid: Optional[int] = None
+    def __init__(
+        self,
+        profile: int,
+        launcher_path: Path = LAUNCHER_PATH,
+        launch_timeout: int = LAUNCH_TIMEOUT,
+    ):
+        self.launcher_path: Path = launcher_path
+        self.profile: int = profile
+        self.launch_timeout: int = launch_timeout
+        self._proc: Optional[ProcessIdentity] = None
 
-        if not self.vrchat_path.exists():
+        if not self.launcher_path.exists():
             raise FileNotFoundError(
-                f"VRChat executable not found at {self.vrchat_path}"
+                f"VRChat launcher not found at {self.launcher_path}"
             )
 
-        matched_pids = []
-        for proc in psutil.process_iter(attrs=["pid", "name", "cmdline"]):
-            if proc.info["name"] == self.VRCHAT_PROC_NAME:
-                cmdline = proc.info.get("cmdline") or []
-                if f"--profile={self.profile}" in cmdline:
-                    matched_pids.append(proc.info["pid"])
+        self._rollup_exist_process()
 
-        if len(matched_pids) == 1:
-            self.vrc_pid = matched_pids[0]
-            logging.info(
-                f"Found existing VRChat process for profile No.{self.profile} (PID={self.vrc_pid})"
-            )
-        elif len(matched_pids) > 1:
-            raise RuntimeError(
-                f"Multiple VRChat processes found for profile No.{self.profile}: {matched_pids}"
-            )
+    @property
+    def vrc_pid(self) -> Optional[int]:
+        return self._proc.pid if self._proc else None
 
     @property
     def is_running(self) -> bool:
-        if self.vrc_pid is None:
+        if not self._proc:
             return False
-        try:
-            proc = psutil.Process(self.vrc_pid)
-            return proc.is_running() and proc.name() == self.VRCHAT_PROC_NAME
-        except psutil.NoSuchProcess:
-            return False
+        return self._check_attached_process()
 
-    def launch(
-        self,
-        instance: Optional[InstanceInfo] = None,
-        no_vr: bool = True,
-        osc: Optional[OscConfig] = None,
-        fps: Optional[int] = None,
-        midi: Optional[str] = None,
-        startup_timeout: int = 60,
-    ):
-        args = [str(self.vrchat_path), f"--profile={self.profile}"]
+    def launch(self, options: LaunchOptions):
+        args = [str(self.launcher_path), f"--profile={self.profile}"]
 
-        if instance:
-            args.append(self.build_launch_url(instance))
-        if osc:
-            args.append(f"--osc={osc.in_port}:{osc.out_ip}:{osc.out_port}")
-        if midi:
-            args.append(f"--midi={midi}")
-        if no_vr:
+        # Target instance
+        if options.instance:
+            args.append(self._build_launch_url(options.instance))
+
+        # Basic options
+        if options.no_vr:
             args.append("--no-vr")
-        if fps:
-            args.append(f"--fps={fps}")
+        if options.fps:
+            args.append(f"--fps={options.fps}")
+        if options.midi:
+            args.append(f"--midi={options.midi}")
+        if options.osc:
+            args.append(
+                f"--osc={options.osc.in_port}:{options.osc.out_ip}:{options.osc.out_port}"
+            )
+
+        # Performance options
+        if options.affinity:
+            args.append(f"--affinity={options.affinity}")
+        if options.process_priority:
+            args.append(f"--process-priority={options.process_priority}")
+
+        # Debug options
+        if options.watch_avatars:
+            args.append("--watch-avatars")
+        if options.watch_worlds:
+            args.append("--watch-worlds")
+        if options.debug_gui:
+            args.append("--enable-debug-gui")
+        if options.sdk_log_levels:
+            args.append("--enable-sdk-log-levels")
+        if options.udon_debug_logging:
+            args.append("--enable-udon-debug-logging")
+
+        # Extra args
+        if options.extra_args:
+            args.extend(options.extra_args)
 
         try:
-            logging.debug(f"Launch args: {args}")
+            logging.debug(f"Launch args: {args[1:]}")
+            launch_time = time.time()
             proc = subprocess.Popen(args)
-            logging.debug(f"launch.exe started (PID={proc.pid})")
+            logging.debug(f"Launcher started (PID={proc.pid})")
+
+            self._proc = self._wait_for_vrchat_process(launch_time)
+            if not self._proc:
+                logging.error("VRChat.exe was not detected after launch")
+                return
+
+            logging.info(
+                f"VRChat started and attached (PID={self._proc.pid}) for profile No.{self.profile}"
+            )
         except Exception as e:
             logging.error(f"Failed to launch VRChat: {e}")
-            return
-
-        # ランチャーの開始時刻以降に起動されたVRChatプロセスを取得する
-        launch_time = psutil.Process(proc.pid).create_time()
-        self.vrc_pid = self._wait_for_vrchat_process(launch_time, startup_timeout)
-
-        if self.vrc_pid:
-            logging.debug(f"VRChat.exe started (PID={self.vrc_pid})")
-        else:
-            logging.error("Failed to detect VRChat.exe process within timeout")
 
     def terminate(self, timeout: int = 15) -> bool:
-        if not self.vrc_pid:
+        if not self._proc:
             return False
 
-        pid = self.vrc_pid
         try:
-            hwnd = self._find_window()
+            process = psutil.Process(self.vrc_pid)
+
+            # PID再利用対策：別プロセスなら既に終了とみなす
+            if not self._check_attached_process():
+                logging.info(
+                    f"Stored process (PID={self._proc.pid}) identity mismatch treat as already terminated"
+                )
+                self._proc = None
+                return True
+
+            hwnd = self._find_window(process.pid)
             if hwnd:
                 # ウィンドウがあればWM_CLOSEでの終了を試みる
-                logging.debug(f"Sending WM_CLOSE to hwnd={hwnd} (PID={pid})")
+                logging.debug(f"Sending WM_CLOSE to hwnd={hwnd} (PID={process.pid})")
                 win32gui.PostMessage(hwnd, win32con.WM_CLOSE, 0, 0)
 
                 # プロセスの終了を待機、タイムアウト時は強制終了
                 try:
-                    psutil.Process(pid).wait(timeout=timeout)
-                    logging.debug(f"VRChat process (PID={pid}) exited after WM_CLOSE")
+                    process.wait(timeout=timeout)
+                    logging.debug(
+                        f"VRChat process (PID={process.pid}) exited after WM_CLOSE"
+                    )
                 except psutil.TimeoutExpired:
                     logging.warning(
-                        f"VRChat process (PID={pid}) did not exit in {timeout}s, forcing terminate"
+                        f"VRChat process (PID={process.pid}) did not exit in {timeout}s, forcing terminate"
                     )
-                    psutil.Process(pid).kill()
+                    process.kill()
             else:
                 # ウィンドウがない場合は強制終了
                 logging.warning(
-                    f"No visible window found for VRChat (PID={pid}), forcing terminate"
+                    f"No visible window found for VRChat (PID={process.pid}), forcing terminate"
                 )
-                psutil.Process(pid).kill()
+                process.kill()
 
+        except psutil.NoSuchProcess:
+            logging.info(f"VRChat process (PID={self.vrc_pid}) already terminated")
+        except psutil.AccessDenied:
+            logging.error(f"Permission denied to terminate VRChat (PID={self.vrc_pid})")
         except Exception as e:
             logging.error(f"Failed to terminate VRChat: {e}")
 
-        alive = psutil.pid_exists(pid)
+        alive = self._check_attached_process()
+
         if not alive:
-            self.vrc_pid = None
+            self._proc = None
 
         return not alive
 
-    @staticmethod
-    def build_launch_url(instance: InstanceInfo) -> str:
+    def _check_attached_process(self, tol: float = 0.5) -> bool:
+        if not self._proc:
+            return False
+        try:
+            p = psutil.Process(self._proc.pid)
+            return (
+                p.is_running()
+                and p.name() == self.VRCHAT_PROC_NAME
+                and abs(p.create_time() - self._proc.create_time) <= tol
+            )
+        except psutil.NoSuchProcess:
+            return False
+
+    def _build_launch_url(self, instance: InstanceInfo) -> str:
         return (
-            f"vrchat://launch?ref=VRCQuickLauncher&id={instance.location}"
+            f"vrchat://launch?"
+            f"ref=VRCQuickLauncher"
+            f"&id={instance.id}"
             f"&shortName={instance.short_name}"
         )
 
-    def _wait_for_vrchat_process(
-        self, launch_time: float, timeout: int
-    ) -> Optional[int]:
-        start = time.time()
+    def _rollup_exist_process(self):
+        logging.debug(f"Scanning processes for VRChat profile No.{self.profile}")
 
-        while time.time() - start < timeout:
-            for p in psutil.process_iter(attrs=["pid", "name", "create_time"]):
+        matched: list[ProcessIdentity] = []
+        for proc in psutil.process_iter(
+            attrs=["pid", "name", "cmdline", "create_time"]
+        ):
+            if proc.info["name"] == self.VRCHAT_PROC_NAME:
+                cmdline = proc.info.get("cmdline") or []
+                if f"--profile={self.profile}" in cmdline:
+                    matched.append(
+                        ProcessIdentity(proc.info["pid"], proc.info["create_time"])
+                    )
+
+        if len(matched) >= 1:
+            # 最初に見つかったものにのみアタッチ
+            self._proc = matched[0]
+            if len(matched) == 1:
+                logging.info(
+                    f"Attached to VRChat process (PID={self._proc.pid}) for profile No.{self.profile}"
+                )
+            else:
+                others = [m.pid for m in matched[1:]]
+                logging.warning(
+                    f"Multiple VRChat processes for profile No.{self.profile}; "
+                    f"attached to PID={self._proc.pid}, others={others}"
+                )
+                logging.warning(
+                    f"Launching multiple instances with the same profile will not function correctly"
+                )
+        else:
+            logging.debug(
+                f"No existing VRChat process found for profile No.{self.profile}"
+            )
+
+    def _wait_for_vrchat_process(self, launch_time: float) -> Optional[ProcessIdentity]:
+        start = time.monotonic()
+        while time.monotonic() - start < self.launch_timeout:
+            for p in psutil.process_iter(
+                attrs=["pid", "name", "create_time", "cmdline"]
+            ):
                 if p.info["name"] == self.VRCHAT_PROC_NAME:
                     if p.info["create_time"] >= launch_time:
-                        return p.info["pid"]
+                        cmdline = p.info.get("cmdline") or []
+                        if f"--profile={self.profile}" in cmdline:
+                            return ProcessIdentity(p.info["pid"], p.info["create_time"])
             time.sleep(1)
 
         return None
 
-    def _find_window(self):
+    @staticmethod
+    def _find_window(pid: int) -> Optional[int]:
         result = None
 
-        def callback(hwnd, _):
+        def callback(hwnd: int, _):
             nonlocal result
             _, win_pid = win32process.GetWindowThreadProcessId(hwnd)
-            if win_pid == self.vrc_pid and win32gui.IsWindowVisible(hwnd):
+            if win_pid == pid and win32gui.IsWindowVisible(hwnd):
                 result = hwnd
                 return False
             return True

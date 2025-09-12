@@ -9,7 +9,7 @@ from app.auth import AuthManager
 from app.model.vrchat import InstanceInfo, InstanceType, UserInfo, UserState
 from app.api.vrchat_api import VRChatAPI
 from app.api.patlite_api import PatliteAPI, LightPattern, BuzzerPattern
-from app.util.launcher import VRCLauncher
+from app.util.launcher import LaunchOptions, VRCLauncher
 
 # ログ設定
 logging.basicConfig(
@@ -101,7 +101,12 @@ def launch_with_joinable_instance():
             return
 
     logging.info("🚀Launching VRChat...")
-    launcher.launch(instance=joinable_instance)
+    launcher.launch(
+        LaunchOptions(
+            instance=joinable_instance,
+            extra_args=["--process-priority=2", "--main-thread-priority=2"],
+        )
+    )
 
     # ショップの自動購入は不可なので通知する
     pl_api.control(r=LightPattern.BLINK1, bz=BuzzerPattern.PATTERN1)
