@@ -2,6 +2,7 @@ import sys
 import time
 import logging
 from typing import Optional
+from datetime import datetime, timedelta
 
 from app.config import Config
 from app.http import HttpClient
@@ -147,6 +148,7 @@ def log_instance_list(group_instance_info: list[InstanceInfo]):
 def main():
     traveling_count = 0
     was_in_most_populated = True
+    last_notify_time = None
 
     auth.load_session()
 
@@ -202,14 +204,21 @@ def main():
 
                         if is_in_most_populated:
                             logging.info("✅ This instance is the most populated one.")
+                            last_notify_time = None
                         else:
                             logging.warning(
                                 "⚠️ This instance is not the most populated one."
                             )
                             vrc_api.invite_myself(most_populated)
 
-                            # 最多インスタンスでなくなった際に1度だけパトライト通知
-                            if was_in_most_populated and not is_in_most_populated:
+                            now = datetime.now()
+
+                            # 最大から外れたとき or 10分経過毎にパトライト通知
+                            if (was_in_most_populated and not is_in_most_populated) or (
+                                last_notify_time
+                                and now - last_notify_time >= timedelta(minutes=10)
+                            ):
+                                last_notify_time = now
                                 pl_api.control(
                                     r=LightPattern.BLINK1, bz=BuzzerPattern.PATTERN1
                                 )
