@@ -162,8 +162,12 @@ def main():
                 group_instance_info = get_group_instance_info()
                 user_info = vrc_api.get_user_info(cfg.user_id)
 
-                # ロスコネ, VRChat落ち対策
-                if user_info.state != UserState.ONLINE:
+                if not launcher.is_running:
+                    # VRChat落ち対策
+                    logging.error("❌️ VRChat is not running. Restarting...")
+                    launch_with_joinable_instance()
+                elif user_info.state != UserState.ONLINE:
+                    # ロスコネ対策
                     logging.error("❌️ User is offline.")
                     launch_with_joinable_instance()
                 else:

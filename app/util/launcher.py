@@ -50,6 +50,10 @@ class VRCLauncher:
     VRCHAT_PROC_NAME: Final[str] = "VRChat.exe"
     LAUNCH_TIMEOUT: Final[int] = 30
 
+    @property
+    def is_running(self) -> bool:
+        return self.get_attached_process() is not None
+
     def __init__(
         self,
         profile: int,
@@ -67,16 +71,6 @@ class VRCLauncher:
             )
 
         self._rollup_exist_process()
-
-    @property
-    def vrc_pid(self) -> Optional[int]:
-        return self._proc.pid if self._proc else None
-
-    @property
-    def is_running(self) -> bool:
-        if not self._proc:
-            return False
-        return self._check_attached_process()
 
     def launch(self, options: LaunchOptions):
         args = [str(self.launcher_path), f"--profile={self.profile}"]
@@ -137,20 +131,13 @@ class VRCLauncher:
             logging.error(f"Failed to launch VRChat: {e}")
 
     def terminate(self, timeout: int = 15) -> bool:
-        if not self._proc:
-            return False
+        process = self.get_attached_process()
+        if not process:
+            logging.debug("VRChat process already terminated")
+            self._proc = None
+            return True
 
         try:
-            process = psutil.Process(self.vrc_pid)
-
-            # PID再利用対策：別プロセスなら既に終了とみなす
-            if not self._check_attached_process():
-                logging.info(
-                    f"Stored process (PID={self._proc.pid}) identity mismatch treat as already terminated"
-                )
-                self._proc = None
-                return True
-
             hwnd = self._find_window(process.pid)
             if hwnd:
                 # ウィンドウがあればWM_CLOSEでの終了を試みる
@@ -163,44 +150,56 @@ class VRCLauncher:
                     logging.debug(
                         f"VRChat process (PID={process.pid}) exited after WM_CLOSE"
                     )
+                except psutil.NoSuchProcess:
+                    logging.debug(
+                        f"VRChat process (PID={process.pid}) already exited after WM_CLOSE"
+                    )
                 except psutil.TimeoutExpired:
                     logging.warning(
                         f"VRChat process (PID={process.pid}) did not exit in {timeout}s, forcing terminate"
                     )
-                    process.kill()
+                    self._force_kill(process)
             else:
                 # ウィンドウがない場合は強制終了
                 logging.warning(
                     f"No visible window found for VRChat (PID={process.pid}), forcing terminate"
                 )
-                process.kill()
-
-        except psutil.NoSuchProcess:
-            logging.info(f"VRChat process (PID={self.vrc_pid}) already terminated")
-        except psutil.AccessDenied:
-            logging.error(f"Permission denied to terminate VRChat (PID={self.vrc_pid})")
+                self._force_kill(process)
         except Exception as e:
-            logging.error(f"Failed to terminate VRChat: {e}")
+            logging.error(f"Unexpected error occured: {e}")
 
-        alive = self._check_attached_process()
+        alive = self.get_attached_process() is None
 
         if not alive:
             self._proc = None
 
-        return not alive
+        return alive
 
-    def _check_attached_process(self, tol: float = 0.5) -> bool:
+    def _force_kill(self, process: psutil.Process, timeout: int = 15):
+        try:
+            process.kill()
+            process.wait(timeout)
+        except psutil.NoSuchProcess:
+            logging.debug(f"VRChat process (PID={process.pid}) already terminated")
+        except psutil.TimeoutExpired:
+            logging.error(
+                f"VRChat process (PID={process.pid}) still alive after kill wait timeout"
+            )
+
+    def get_attached_process(self, tol: float = 0.5) -> Optional[psutil.Process]:
         if not self._proc:
-            return False
+            return None
         try:
             p = psutil.Process(self._proc.pid)
-            return (
+            if (
                 p.is_running()
                 and p.name() == self.VRCHAT_PROC_NAME
                 and abs(p.create_time() - self._proc.create_time) <= tol
-            )
+            ):
+                return p
         except psutil.NoSuchProcess:
-            return False
+            return None
+        return None
 
     def _build_launch_url(self, instance: InstanceInfo) -> str:
         return (
