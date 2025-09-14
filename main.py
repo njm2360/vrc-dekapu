@@ -147,6 +147,7 @@ def log_instance_list(group_instance_info: list[InstanceInfo]):
 
 def main():
     traveling_count = 0
+    losconn_count = 0
     was_in_most_populated = True
     last_notify_time = None
 
@@ -168,9 +169,23 @@ def main():
                     launch_with_joinable_instance()
                 elif user_info.state != UserState.ONLINE:
                     # ロスコネ対策
-                    logging.error("❌️ User is offline.")
-                    launch_with_joinable_instance()
+                    losconn_count += 1
+                    logging.warning(f"⚠️ User is offline... attempt {losconn_count}")
+
+                    if losconn_count == 1:
+                        # 初回のみ通知
+                        pl_api.control(r=LightPattern.BLINK1, bz=BuzzerPattern.PATTERN1)
+
+                    if losconn_count >= 3:
+                        # 3回継続してオフラインの場合は強制再起動
+                        logging.error(
+                            "❌️ Lost connection persists. Restarting VRChat..."
+                        )
+                        losconn_count = 0
+                        launch_with_joinable_instance()
                 else:
+                    losconn_count = 0
+
                     # 無限Joining対策
                     if user_info.traveling_to_location is not None:
                         traveling_count += 1
@@ -179,6 +194,7 @@ def main():
                         )
 
                         if traveling_count >= 3:
+                            # 3回継続して移動中の場合は強制再起動
                             logging.error(
                                 "❌ Traveling timeout exceeded. Restarting VRChat..."
                             )
@@ -194,26 +210,46 @@ def main():
                         pl_api.control(r=LightPattern.BLINK1, bz=BuzzerPattern.PATTERN1)
 
                     # グルパブ内で最多インスタンスに滞在しているかチェック
-                    most_populated = max(
-                        group_instance_info, key=lambda x: x.user_count, default=None
-                    )
-
-                    if most_populated is None:
+                    if not group_instance_info:
                         logging.warning("⚠️ No populated instances found to compare.")
                         is_in_most_populated = True
                     else:
-                        is_in_most_populated = (
-                            user_info.location == most_populated.location
+                        max_user_count = max(i.user_count for i in group_instance_info)
+                        most_populated_instances = [
+                            i
+                            for i in group_instance_info
+                            if i.user_count == max_user_count
+                        ]
+
+                        # ユーザーの居場所が最多インスタンス群のどれかに含まれるかチェック
+                        is_in_most_populated = any(
+                            user_info.location == inst.location
+                            for inst in most_populated_instances
                         )
 
                         if is_in_most_populated:
-                            logging.info("✅ This instance is the most populated one.")
+                            logging.info(
+                                "✅ This instance is one of the most populated ones."
+                            )
                             last_notify_time = None
                         else:
                             logging.warning(
-                                "⚠️ This instance is not the most populated one."
+                                "⚠️ This instance is not among the most populated ones."
                             )
-                            vrc_api.invite_myself(most_populated)
+
+                            # JoinQueueが有効 => QueueSizeが小さいものの順番で選定
+                            queue_enabled_instances = [
+                                i for i in most_populated_instances if i.queue_enabled
+                            ]
+
+                            if queue_enabled_instances:
+                                invite_target = min(
+                                    queue_enabled_instances, key=lambda x: x.queue_size
+                                )
+                            else:
+                                invite_target = most_populated_instances[0]
+
+                            vrc_api.invite_myself(invite_target)
 
                             now = datetime.now()
 
