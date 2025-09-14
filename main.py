@@ -1,7 +1,8 @@
 import sys
 import time
 import logging
-from typing import Optional
+from pathlib import Path
+from typing import Final, Optional
 from datetime import datetime, timedelta
 
 from app.config import Config
@@ -9,22 +10,41 @@ from app.http import HttpClient
 from app.auth import AuthManager
 from app.model.vrchat import InstanceInfo, InstanceType, UserInfo, UserState
 from app.api.vrchat_api import VRChatAPI
-from app.api.patlite_api import PatliteAPI, LightPattern, BuzzerPattern
+from app.api.patlite_api import (
+    ControlOptions,
+    LedOptions,
+    PatliteAPI,
+    LightPattern,
+)
 from app.util.launcher import LaunchOptions, VRCLauncher
 
-# ログ設定
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
-
 cfg = Config()
-http = HttpClient(cfg)
+http = HttpClient()
 auth = AuthManager(http, cfg)
 vrc_api = VRChatAPI(http, auth, cfg)
 pl_api = PatliteAPI(http, ip_address=cfg.patlite_ip)
 launcher = VRCLauncher(profile=cfg.profile)
+
+POPULATION_DIFF_THRESHOLD: Final[int] = 3
+
+
+def logger_init():
+    log_dir = Path("logs")
+    log_dir.mkdir(parents=True, exist_ok=True)
+
+    start_time = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_file = log_dir / f"{start_time}.log"
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+        handlers=[
+            logging.StreamHandler(),
+            logging.FileHandler(log_file, encoding="utf-8"),
+        ],
+        force=True,
+    )
 
 
 def get_group_instance_info() -> list[InstanceInfo]:
@@ -99,6 +119,14 @@ def launch_with_joinable_instance():
         logging.info("💾 VRChat is running. Closing the app to persistence save...")
         if not launcher.terminate():
             logging.error("Failed to terminate VRChat. Please exit VRChat manually.")
+            pl_api.control(
+                ControlOptions(
+                    led=LedOptions(red=LightPattern.BLINK1),
+                    speech="正常終了できませんでした。手動で起動して下さい。",
+                    repeat=255,
+                    notify=9,
+                )
+            )
             return
 
     logging.info("🚀Launching VRChat...")
@@ -110,7 +138,14 @@ def launch_with_joinable_instance():
     )
 
     # ショップの自動購入は不可なので通知する
-    pl_api.control(r=LightPattern.BLINK1, bz=BuzzerPattern.PATTERN1)
+    pl_api.control(
+        ControlOptions(
+            led=LedOptions(red=LightPattern.BLINK1),
+            speech="再起動しました。初期操作をしてください",
+            repeat=255,
+            notify=9,
+        )
+    )
 
 
 def check_traveling(user_info: UserInfo, traveling_count: int) -> int:
@@ -134,13 +169,16 @@ def check_world(user_info: UserInfo):
     return bool(is_in_dekapu or is_traveling_to_dekapu)
 
 
-def log_instance_list(group_instance_info: list[InstanceInfo]):
+def log_instance_list(group_instance_info: list[InstanceInfo], current_location: str):
     for inst in sorted(group_instance_info, key=lambda x: x.user_count, reverse=True):
         msg = f"📌 Instance Name: {inst.name}, 👤Users: {inst.user_count:2d}/{inst.world.capacity}"
-        msg += f", 👥Queue: {inst.queue_size if inst.queue_enabled else "disabled"}"
+        msg += f", 👥Queue: {inst.queue_size if inst.queue_enabled else 'disabled'}"
 
         if inst.closed_at:
             msg += f", 🚧Closed at: {inst.closed_at.isoformat()}"
+
+        if inst.location == current_location:
+            msg += " (*)"
 
         logging.info(msg)
 
@@ -151,6 +189,7 @@ def main():
     was_in_most_populated = True
     last_notify_time = None
 
+    logger_init()
     auth.load_session()
 
     try:
@@ -174,7 +213,14 @@ def main():
 
                     if losconn_count == 1:
                         # 初回のみ通知
-                        pl_api.control(r=LightPattern.BLINK1, bz=BuzzerPattern.PATTERN1)
+                        pl_api.control(
+                            ControlOptions(
+                                led=LedOptions(red=LightPattern.BLINK1),
+                                speech="ロスコネクションを検知しました、注意してください",
+                                repeat=255,
+                                notify=9,
+                            )
+                        )
 
                     if losconn_count >= 3:
                         # 3回継続してオフラインの場合は強制再起動
@@ -207,36 +253,60 @@ def main():
                         logging.info("✅ Current world check: OK")
                     else:
                         logging.error("❌️ Current world check: NG")
-                        pl_api.control(r=LightPattern.BLINK1, bz=BuzzerPattern.PATTERN1)
+                        pl_api.control(
+                            ControlOptions(
+                                led=LedOptions(red=LightPattern.BLINK1),
+                                speech="ワールドをチェックしてください",
+                                repeat=255,
+                                notify=9,
+                            )
+                        )
 
                     # グルパブ内で最多インスタンスに滞在しているかチェック
                     if not group_instance_info:
-                        logging.warning("⚠️ No populated instances found to compare.")
+                        logging.warning("⚠️ No populated instances found to compare")
                         is_in_most_populated = True
                     else:
                         max_user_count = max(i.user_count for i in group_instance_info)
-                        most_populated_instances = [
-                            i
-                            for i in group_instance_info
-                            if i.user_count == max_user_count
-                        ]
-
-                        # ユーザーの居場所が最多インスタンス群のどれかに含まれるかチェック
-                        is_in_most_populated = any(
-                            user_info.location == inst.location
-                            for inst in most_populated_instances
+                        current_instance = next(
+                            (
+                                i
+                                for i in group_instance_info
+                                if i.location == user_info.location
+                            ),
+                            None,
                         )
 
+                        if current_instance is None:
+                            # グルパブ外にいる場合はNG
+                            logging.error("❌️ User is not in any group instance")
+                            is_in_most_populated = False
+                        else:
+                            # 最多インスタンスとの差分チェック
+                            diff = max_user_count - current_instance.user_count
+
+                            if diff == 0:
+                                is_in_most_populated = True
+                                logging.info("✅ This instance is most populated one")
+                            elif diff < POPULATION_DIFF_THRESHOLD:
+                                is_in_most_populated = True
+                                logging.warning(
+                                    f"⚠️ This instance is nearly most populated (diff={diff})"
+                                )
+                            else:
+                                is_in_most_populated = False
+                                logging.error(
+                                    f"❌️ This instance is {diff} users behind the most populated one"
+                                )
+
                         if is_in_most_populated:
-                            logging.info(
-                                "✅ This instance is one of the most populated ones."
-                            )
                             last_notify_time = None
                         else:
-                            logging.warning(
-                                "⚠️ This instance is not among the most populated ones."
-                            )
-
+                            most_populated_instances = [
+                                i
+                                for i in group_instance_info
+                                if i.user_count == max_user_count
+                            ]
                             # JoinQueueが有効 => QueueSizeが小さいものの順番で選定
                             queue_enabled_instances = [
                                 i for i in most_populated_instances if i.queue_enabled
@@ -255,17 +325,22 @@ def main():
 
                             # 最大から外れたとき or 10分経過毎にパトライト通知
                             if (was_in_most_populated and not is_in_most_populated) or (
-                                last_notify_time
+                                last_notify_time is not None
                                 and now - last_notify_time >= timedelta(minutes=10)
                             ):
                                 last_notify_time = now
                                 pl_api.control(
-                                    r=LightPattern.BLINK1, bz=BuzzerPattern.PATTERN1
+                                    ControlOptions(
+                                        led=LedOptions(red=LightPattern.BLINK1),
+                                        speech="最大インスタンスから外れています",
+                                        repeat=255,
+                                        notify=9,
+                                    )
                                 )
 
                     was_in_most_populated = is_in_most_populated
 
-                log_instance_list(group_instance_info)
+                log_instance_list(group_instance_info, user_info.location)
 
             except Exception as e:
                 logging.exception(e)

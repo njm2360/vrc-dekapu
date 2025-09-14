@@ -3,8 +3,6 @@ from requests import Session
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-from app.config import Config
-
 
 class HttpClient:
 
@@ -15,8 +13,7 @@ class HttpClient:
         )
     }
 
-    def __init__(self, config: Config) -> None:
-        self.config = config
+    def __init__(self) -> None:
         self.session = self._create_session()
 
     def _create_session(self) -> Session:
