@@ -25,7 +25,7 @@ vrc_api = VRChatAPI(http, auth, cfg)
 pl_api = PatliteAPI(http, ip_address=cfg.patlite_ip)
 launcher = VRCLauncher(profile=cfg.profile)
 
-POPULATION_DIFF_THRESHOLD: Final[int] = 3
+POPULATION_DIFF_THRESHOLD: Final[int] = 8
 
 
 def logger_init():
