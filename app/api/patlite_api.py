@@ -1,3 +1,4 @@
+import logging
 from dataclasses import dataclass
 from enum import IntEnum, StrEnum
 from typing import Optional
@@ -30,7 +31,20 @@ class VoiceType(StrEnum):
     FEMALE = "female"
 
 
-@dataclass(frozen=True)
+class NotifySound(IntEnum):
+    USER_1 = 1
+    USER_2 = 2
+    USER_3 = 3
+    USER_4 = 4
+    USER_5 = 5
+    CHIME_1 = 6  # ピンポン
+    CHIME_2 = 7  # 放送開始
+    CHIME_3 = 8  # 放送終了
+    ALARM_1 = 9  # ピロリロ
+    ALARM_2 = 10  # 警告音
+
+
+@dataclass
 class LedOptions:
     red: Optional[LightPattern] = None
     yellow: Optional[LightPattern] = None
@@ -50,7 +64,7 @@ class LedOptions:
         return "".join(str(int(v)) for v in vals)
 
 
-@dataclass(frozen=True)
+@dataclass
 class ControlOptions:
     led: Optional[LedOptions] = None
     buzzer: Optional[BuzzerPattern] = None
@@ -63,14 +77,17 @@ class ControlOptions:
     voice: VoiceType = VoiceType.FEMALE
     speed: Optional[int] = None
     tone: Optional[int] = None
-    notify: Optional[int] = None
-    notify_tail: Optional[int] = None
+    notify: Optional[NotifySound] = None
+    notify_tail: Optional[NotifySound] = None
 
     def __post_init__(self):
         if self.sound is not None and not (1 <= self.sound <= 71):
             raise ValueError(f"sound must be 1–71, got {self.sound}")
         if self.speech is not None and len(self.speech) > 400:
-            raise ValueError(f"speech must be <=400 characters, got {len(self.speech)}")
+            logging.warning(
+                f"speech was truncated to 400 characters (got {len(self.speech)})"
+            )
+            self.speech = self.speech[:400]
         if self.repeat is not None:
             if not (0 <= self.repeat <= 254 or self.repeat == 255):
                 raise ValueError(f"repeat must be 0–254 or 255, got {self.repeat}")
@@ -91,13 +108,9 @@ class ControlOptions:
             if self.speech is None:
                 raise ValueError("tone requires speech to be set")
         if self.notify is not None:
-            if not (0 <= self.notify <= 10):
-                raise ValueError(f"notify must be 0–10, got {self.notify}")
             if self.speech is None:
                 raise ValueError("notify requires speech to be set")
         if self.notify_tail is not None:
-            if not (0 <= self.notify_tail <= 10):
-                raise ValueError(f"notify_tail must be 0–10, got {self.notify_tail}")
             if self.speech is None:
                 raise ValueError("notify_tail requires speech to be set")
 
@@ -107,11 +120,11 @@ class ControlOptions:
         if self.led:
             params["led"] = self.led.to_pattern()
         if self.buzzer:
-            params["b-pat"] = str(self.buzzer)
+            params["b-pat"] = self.buzzer.value
         if self.speech:
             params["speech"] = self.speech
         if self.voice:
-            params["voice"] = str(self.voice)
+            params["voice"] = self.voice.value
         if self.sound is not None:
             params["sound"] = self.sound
         if self.repeat is not None:
@@ -127,9 +140,9 @@ class ControlOptions:
         if self.tone is not None:
             params["tone"] = self.tone
         if self.notify is not None:
-            params["notify"] = self.notify
+            params["notify"] = self.notify.value
         if self.notify_tail is not None:
-            params["notifyTail"] = self.notify_tail
+            params["notifyTail"] = self.notify_tail.value
 
         return params
 

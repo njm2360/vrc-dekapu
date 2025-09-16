@@ -13,6 +13,7 @@ from app.api.vrchat_api import VRChatAPI
 from app.api.patlite_api import (
     ControlOptions,
     LedOptions,
+    NotifySound,
     PatliteAPI,
     LightPattern,
 )
@@ -124,7 +125,7 @@ def launch_with_joinable_instance():
                     led=LedOptions(red=LightPattern.BLINK1),
                     speech="正常終了できませんでした。手動で起動して下さい。",
                     repeat=255,
-                    notify=9,
+                    notify=NotifySound.ALARM_1,
                 )
             )
             return
@@ -143,7 +144,7 @@ def launch_with_joinable_instance():
             led=LedOptions(red=LightPattern.BLINK1),
             speech="再起動しました。初期操作をしてください",
             repeat=255,
-            notify=9,
+            notify=NotifySound.ALARM_1,
         )
     )
 
@@ -184,10 +185,11 @@ def log_instance_list(group_instance_info: list[InstanceInfo], current_location:
 
 
 def main():
-    traveling_count = 0
-    losconn_count = 0
-    was_in_most_populated = True
-    last_notify_time = None
+    traveling_count: int = 0
+    losconn_count: int = 0
+    was_in_most_populated: Optional[bool] = True
+    last_notify_time: Optional[datetime] = None
+    last_post_id: Optional[str] = None
 
     logger_init()
     auth.load_session()
@@ -218,7 +220,7 @@ def main():
                                 led=LedOptions(red=LightPattern.BLINK1),
                                 speech="ロスコネクションを検知しました、注意してください",
                                 repeat=255,
-                                notify=9,
+                                notify=NotifySound.ALARM_1,
                             )
                         )
 
@@ -258,7 +260,7 @@ def main():
                                 led=LedOptions(red=LightPattern.BLINK1),
                                 speech="ワールドをチェックしてください",
                                 repeat=255,
-                                notify=9,
+                                notify=NotifySound.ALARM_1,
                             )
                         )
 
@@ -334,13 +336,33 @@ def main():
                                         led=LedOptions(red=LightPattern.BLINK1),
                                         speech="最大インスタンスから外れています",
                                         repeat=255,
-                                        notify=9,
+                                        notify=NotifySound.ALARM_1,
                                     )
                                 )
 
                     was_in_most_populated = is_in_most_populated
 
                 log_instance_list(group_instance_info, user_info.location)
+
+                # 直近のグループ投稿を確認
+                posts = vrc_api.get_group_posts(Config.DEKAPU_GROUP_ID, n_count=1)
+                if posts:
+                    newest_post = posts[0]
+                    if last_post_id is None:
+                        last_post_id = newest_post.id
+                    elif newest_post.id != last_post_id:
+                        last_post_id = newest_post.id
+                        logging.info(
+                            f"Found new post:\nTitle: {newest_post.title}\nText: {newest_post.text}"
+                        )
+                        pl_api.control(
+                            ControlOptions(
+                                led=LedOptions(blue=LightPattern.BLINK1),
+                                speech=f"新しい投稿があります。{newest_post.title} {newest_post.text}",
+                                repeat=255,
+                                notify=NotifySound.CHIME_2,
+                            )
+                        )
 
             except Exception as e:
                 logging.exception(e)

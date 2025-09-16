@@ -154,5 +154,20 @@ class WorldsInfo(WorldInfo):
         return [InstanceEntry.from_list(item) for item in v]
 
 
+class GroupPostInfo(BaseModel):
+    id: str = Field(..., alias="id")
+    group_id: str = Field(..., alias="groupId")
+    author_id: str = Field(..., alias="authorId")
+    editor_id: Optional[str] = Field(None, alias="editorId")
+    visibility: str = Field(..., alias="visibility")
+    role_ids: list[str] = Field(default_factory=list, alias="roleIds")
+    title: str = Field(..., alias="title")
+    text: str = Field(..., alias="text")
+    image_id: Optional[str] = Field(None, alias="imageId")
+    image_url: Optional[str] = Field(None, alias="imageUrl")
+    created_at: datetime = Field(..., alias="createdAt")
+    updated_at: datetime = Field(..., alias="updatedAt")
+
+
 class AuthVerifyResponse(BaseModel):
     verified: bool

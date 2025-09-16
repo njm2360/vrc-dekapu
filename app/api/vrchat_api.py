@@ -5,7 +5,13 @@ import requests
 from app.config import Config
 from app.http import HttpClient
 from app.auth import AuthManager
-from app.model.vrchat import UserInfo, GroupInstance, InstanceInfo, WorldsInfo
+from app.model.vrchat import (
+    GroupPostInfo,
+    UserInfo,
+    GroupInstance,
+    InstanceInfo,
+    WorldsInfo,
+)
 
 
 class VRChatAPI:
@@ -69,3 +75,18 @@ class VRChatAPI:
         data = resp.json()
         logging.debug(json.dumps(data, indent=2, ensure_ascii=False))
         return WorldsInfo(**data)
+
+    def get_group_posts(
+        self,
+        group_id: str,
+        n_count: int = 60,
+        offset: int = 0,
+        public_only: bool = True,
+    ) -> list[GroupPostInfo]:
+        params = {"n": n_count, "offset": offset, "publicOnly": public_only}
+        resp = self._request_with_relogin(
+            "GET", f"{self.config.BASE_URL}/groups/{group_id}/posts", params=params
+        )
+        data = resp.json()
+        logging.debug(json.dumps(data, indent=2, ensure_ascii=False))
+        return [GroupPostInfo(**gp) for gp in data["posts"]]
