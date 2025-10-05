@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from enum import IntEnum, StrEnum
 from typing import Optional
 
-from app.http import HttpClient
+from app.util.http import HttpClient
 
 
 class LightPattern(IntEnum):

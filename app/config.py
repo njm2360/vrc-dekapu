@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from typing import Final, Optional
 from dotenv import load_dotenv
 
@@ -23,6 +24,10 @@ class Config:
         self.user_id: str = self._require_env("USER_ID")
         self.profile: int = int(self._require_env("PROFILE"))
         self.patlite_ip: Optional[str] = os.getenv("PATLITE_IP")
+
+        self.cookie_file = Path("data") / f"{self.user_id}.json"
+        self.cookie_file.parent.mkdir(parents=True, exist_ok=True)
+
 
     @staticmethod
     def _require_env(key: str) -> str:

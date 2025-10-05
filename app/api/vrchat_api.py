@@ -3,8 +3,8 @@ import json
 import requests
 
 from app.config import Config
-from app.http import HttpClient
-from app.auth import AuthManager
+from app.util.http import HttpClient
+from app.util.auth import AuthManager
 from app.model.vrchat import (
     GroupPostInfo,
     UserInfo,

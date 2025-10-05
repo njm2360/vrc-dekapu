@@ -8,7 +8,7 @@ from typing import Final
 from requests.auth import HTTPBasicAuth
 
 from app.config import Config
-from app.http import HttpClient
+from app.util.http import HttpClient
 from app.model.vrchat import AuthVerifyResponse
 
 
@@ -20,10 +20,10 @@ class AuthManager:
     AUTH_DOMAIN: Final[str] = "api.vrchat.cloud"
     AUTH_COOKIE: Final[str] = "auth"
 
-    def __init__(self, http: HttpClient, config: Config, cookie_file: str | None = None) -> None:
+    def __init__(self, http: HttpClient, config: Config) -> None:
         self.http = http
         self.config = config
-        self.cookie_file = cookie_file or config.COOKIE_FILE
+        self.cookie_file = config.cookie_file
         self.session = http.session
 
     @staticmethod
