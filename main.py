@@ -224,13 +224,13 @@ def main():
                             )
                         )
 
-                    if losconn_count >= 3:
-                        # 3回継続してオフラインの場合は強制再起動
-                        logging.error(
-                            "❌️ Lost connection persists. Restarting VRChat..."
-                        )
-                        losconn_count = 0
-                        launch_with_joinable_instance()
+                    # if losconn_count >= 3:
+                    #     # 3回継続してオフラインの場合は強制再起動
+                    #     logging.error(
+                    #         "❌️ Lost connection persists. Restarting VRChat..."
+                    #     )
+                    #     losconn_count = 0
+                    #     launch_with_joinable_instance()
                 else:
                     losconn_count = 0
 
@@ -269,7 +269,10 @@ def main():
                         logging.warning("⚠️ No populated instances found to compare")
                         is_in_most_populated = True
                     else:
-                        max_user_count = max(i.user_count for i in group_instance_info)
+                        joinable_instances = [
+                            i for i in group_instance_info if i.closed_at is None
+                        ]
+                        max_user_count = max(i.user_count for i in joinable_instances)
                         current_instance = next(
                             (
                                 i
@@ -287,7 +290,7 @@ def main():
                             # 最多インスタンスとの差分チェック
                             diff = max_user_count - current_instance.user_count
 
-                            if diff == 0:
+                            if diff <= 0:
                                 is_in_most_populated = True
                                 logging.info("✅ This instance is most populated one")
                             elif diff < POPULATION_DIFF_THRESHOLD:
@@ -306,7 +309,7 @@ def main():
                         else:
                             most_populated_instances = [
                                 i
-                                for i in group_instance_info
+                                for i in joinable_instances
                                 if i.user_count == max_user_count
                             ]
                             # JoinQueueが有効 => QueueSizeが小さいものの順番で選定
