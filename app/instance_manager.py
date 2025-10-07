@@ -3,7 +3,7 @@ from typing import Optional
 from datetime import datetime, timedelta, timezone
 
 from app.api.vrchat_api import VRChatAPI
-from app.model.vrchat import InstanceInfo, InstanceType, UserInfo
+from app.model.vrchat import GroupInstanceType, InstanceInfo, InstanceType, UserInfo
 
 
 class InstanceManager:
@@ -25,9 +25,10 @@ class InstanceManager:
             if gi.world.id == self.world_id
         ]
 
-    def find_joinable(
+    def find(
         self,
         include_public: bool = True,
+        most_populate: bool = False,
         capacity_margin: int = 1,
         close_margin: Optional[timedelta] = None,
     ) -> Optional[InstanceInfo]:
@@ -44,27 +45,27 @@ class InstanceManager:
         candidates = [
             i
             for i in self._instances
-            if i.user_count < i.world.capacity - capacity_margin
+            if i.group_instance_type == GroupInstanceType.PUBLIC
             and is_effectively_open(i)
+            and (most_populate or (i.user_count < i.world.capacity - capacity_margin))
         ]
-        if candidates:
-            return max(candidates, key=lambda x: x.user_count)
 
-        # パブリックから探索
-        if include_public:
+        # グループで該当がない場合パブリックからも探索
+        if include_public and len(candidates) == 0:
             worlds = self.vrc_api.get_worlds(self.world_id)
-            for entry in sorted(
-                worlds.instances, key=lambda w: w.user_count, reverse=True
-            ):
+            for entry in worlds.instances:
                 info = self.vrc_api.get_instance_info(self.world_id, entry.instance_id)
                 if (
                     info.type == InstanceType.PUBLIC
                     and is_effectively_open(info)
-                    and info.user_count < info.world.capacity - capacity_margin
+                    and (
+                        most_populate
+                        or (info.user_count < info.world.capacity - capacity_margin)
+                    )
                 ):
-                    return info
+                    candidates.append(info)
 
-        return None
+        return max(candidates, key=lambda x: x.user_count, default=None)
 
     def print(self, current_location: str) -> None:
         if not self._instances:

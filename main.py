@@ -98,22 +98,21 @@ def main():
                 if not launcher.is_running:
                     # VRChat落ち対策
                     logging.error("❌️ VRChat is not running. Restarting...")
-                    instance = instance_manager.find_joinable()
+                    instance = instance_manager.find()
                     launch_with_instance(instance)
 
-                elif user_info.state != UserState.ONLINE:
-                    # ロスコネ対策
-                    if connection_monitor.check(user_info):
-                        # Note: パラレルワールドが発生してオンライン状態が壊れる場合があるので一旦コメントアウト
+                # ロスコネ対策
+                if connection_monitor.check(user_info):
+                    # Note: パラレルワールドが発生してオンライン状態が壊れる場合があるので一旦コメントアウト
 
-                        # オフライン状態が継続する場合は再起動
-                        # instance = instance_manager.find_joinable()
-                        # launch_with_instance(instance)
-                        pass
+                    # オフライン状態が継続する場合は再起動
+                    # instance = instance_manager.find_joinable()
+                    # launch_with_instance(instance)
+                    pass
                 else:
                     # 無限Joining対策
                     if traveling_checker.check(user_info):
-                        instance = instance_manager.find_joinable()
+                        instance = instance_manager.find()
                         launch_with_instance(instance)
 
                     # でかプに滞在しているかチェック
@@ -134,8 +133,8 @@ def main():
                     if not population_monitor.evaluate(
                         instance_manager.instances, user_info
                     ):
-                        # InviteなのでJoinマージンなしで検索
-                        if target := instance_manager.find_joinable(capacity_margin=0):
+                        # Inviteなので最大人数インスタンスを検索
+                        if target := instance_manager.find(most_populate=True):
                             vrc_api.invite_myself(target)
 
                 instance_manager.print(user_info.location)
