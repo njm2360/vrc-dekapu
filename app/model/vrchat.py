@@ -26,7 +26,7 @@ class InstanceType(Enum):
     GROUP = "group"
 
 
-class GroupInstanceType(Enum):
+class GroupAccessType(Enum):
     PUBLIC = "public"
     PLUS = "plus"
     MEMBER = "members"
@@ -111,8 +111,8 @@ class InstanceInfo(BaseModel):
     name: str  # インスタンス番号
     location: str  # ロケーション
     type: InstanceType  # インスタンスの種類
-    group_instance_type: Optional[GroupInstanceType] = Field(
-        None, alias="groupInstanceType"
+    group_access_type: Optional[GroupAccessType] = Field(
+        None, alias="groupAccessType"
     )  # グループインスタンスの種類
     instance_id: str = Field(..., alias="instanceId")  # インスタンスID(wrld+instance)
     short_name: str = Field(..., alias="secureName")  # 短縮名 (APIではsecureName,バグ?)

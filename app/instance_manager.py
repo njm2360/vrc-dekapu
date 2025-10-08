@@ -3,7 +3,7 @@ from typing import Optional
 from datetime import datetime, timedelta, timezone
 
 from app.api.vrchat_api import VRChatAPI
-from app.model.vrchat import GroupInstanceType, InstanceInfo, InstanceType, UserInfo
+from app.model.vrchat import GroupAccessType, InstanceInfo, InstanceType, UserInfo
 
 
 class InstanceManager:
@@ -45,7 +45,7 @@ class InstanceManager:
         candidates = [
             i
             for i in self._instances
-            if i.group_instance_type == GroupInstanceType.PUBLIC
+            if i.group_access_type == GroupAccessType.PUBLIC
             and is_effectively_open(i)
             and (most_populate or (i.user_count < i.world.capacity - capacity_margin))
         ]
