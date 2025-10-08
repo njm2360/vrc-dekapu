@@ -95,8 +95,8 @@ def main():
                 instance_manager.update()
                 user_info = vrc_api.get_user_info(cfg.user_id)
 
+                # VRChat落ち対策
                 if not launcher.is_running:
-                    # VRChat落ち対策
                     logging.error("❌️ VRChat is not running. Restarting...")
                     instance = instance_manager.find()
                     launch_with_instance(instance)
@@ -109,7 +109,9 @@ def main():
                     # instance = instance_manager.find_joinable()
                     # launch_with_instance(instance)
                     pass
-                else:
+
+                # オンライン時: メイン処理
+                if user_info.state == UserState.ONLINE:
                     # 無限Joining対策
                     if traveling_checker.check(user_info):
                         instance = instance_manager.find()
@@ -137,8 +139,6 @@ def main():
                         if target := instance_manager.find(most_populate=True):
                             vrc_api.invite_myself(target)
 
-                instance_manager.print(user_info.location)
-
                 # 直近のグループ投稿を確認
                 if post := post_manager.check_new_post():
                     pl_api.control(
@@ -149,6 +149,9 @@ def main():
                             notify=NotifySound.CHIME_2,
                         )
                     )
+
+                # インスタンス一覧情報を表示
+                instance_manager.print(user_info.location)
 
             except Exception as e:
                 logging.exception(e)
