@@ -24,9 +24,8 @@ class ConnectionMonitor:
             if self._lost_count == 1:
                 self._notify()
 
-            if self._lost_count >= self.max_attempts:
+            if self._lost_count == self.max_attempts:
                 logging.error("❌ Lost connection persists.")
-                self._lost_count = 0
                 return True
             return False
 
