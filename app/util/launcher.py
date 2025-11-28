@@ -59,10 +59,12 @@ class VRCLauncher:
         profile: int,
         launcher_path: Path = LAUNCHER_PATH,
         launch_timeout: int = LAUNCH_TIMEOUT,
+        manage_process: bool = True,
     ):
         self.launcher_path: Path = launcher_path
         self.profile: int = profile
         self.launch_timeout: int = launch_timeout
+        self.manage_process: bool = manage_process
         self._proc: Optional[ProcessIdentity] = None
 
         if not self.launcher_path.exists():
@@ -70,7 +72,8 @@ class VRCLauncher:
                 f"VRChat launcher not found at {self.launcher_path}"
             )
 
-        self._rollup_exist_process()
+        if self.manage_process:
+            self._rollup_exist_process()
 
     def launch(self, options: LaunchOptions):
         args = [str(self.launcher_path), f"--profile={self.profile}"]
@@ -119,10 +122,11 @@ class VRCLauncher:
             proc = subprocess.Popen(args)
             logging.debug(f"Launcher started (PID={proc.pid})")
 
-            self._proc = self._wait_for_vrchat_process(launch_time)
-            if not self._proc:
-                logging.error("VRChat.exe was not detected after launch")
-                return
+            if self.manage_process:
+                self._proc = self._wait_for_vrchat_process(launch_time)
+                if not self._proc:
+                    logging.error("VRChat.exe was not detected after launch")
+                    return
 
             logging.info(
                 f"VRChat started and attached (PID={self._proc.pid}) for profile No.{self.profile}"
