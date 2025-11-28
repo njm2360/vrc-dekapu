@@ -4,6 +4,9 @@ from pydantic import BaseModel, field_validator
 from typing import Optional
 from pydantic import Field
 
+from app.model.group_access_type import GroupAccessType
+from app.model.instance_type import InstanceType
+
 
 class UserState(Enum):
     ONLINE = "online"
@@ -16,20 +19,6 @@ class ReleaseStatus(Enum):
     PRIVATE = "private"
     HIDDEN = "hidden"
     ALL = "all"
-
-
-class InstanceType(Enum):
-    PUBLIC = "public"
-    HIDDEN = "hidden"
-    FRIENDS = "friends"
-    PRIVATE = "private"
-    GROUP = "group"
-
-
-class GroupAccessType(Enum):
-    PUBLIC = "public"
-    PLUS = "plus"
-    MEMBER = "members"
 
 
 class InstanceEntry(BaseModel):
@@ -108,6 +97,7 @@ class WorldInfo(BaseModel):
 
 class InstanceInfo(BaseModel):
     id: str  # インスタンスID(wrld+instance)
+    display_name: Optional[str] = Field(None, alias="displayName")  # 表示名
     name: str  # インスタンス番号
     location: str  # ロケーション
     type: InstanceType  # インスタンスの種類

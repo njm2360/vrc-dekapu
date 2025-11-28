@@ -3,6 +3,7 @@ import json
 import requests
 
 from app.config import Config
+from app.model.instance.create import CreateInstanceConfig
 from app.util.http import HttpClient
 from app.util.auth import AuthManager
 from app.model.vrchat import (
@@ -51,6 +52,16 @@ class VRChatAPI:
         resp = self._request_with_relogin(
             "GET", f"{self.config.BASE_URL}/instances/{world_id}:{instance_id}"
         )
+        data = resp.json()
+        logging.debug(json.dumps(data, indent=2, ensure_ascii=False))
+        return InstanceInfo(**data)
+
+    def create_instance(self, instance: CreateInstanceConfig):
+        data = instance.model_dump(by_alias=True)
+        resp = self._request_with_relogin(
+            "POST", "https://api.vrchat.cloud/api/1/instances", data=data
+        )
+        resp.raise_for_status()
         data = resp.json()
         logging.debug(json.dumps(data, indent=2, ensure_ascii=False))
         return InstanceInfo(**data)
