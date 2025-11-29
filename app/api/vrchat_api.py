@@ -66,6 +66,16 @@ class VRChatAPI:
         logging.debug(json.dumps(data, indent=2, ensure_ascii=False))
         return InstanceInfo(**data)
 
+    def close_instance(self, instance: InstanceInfo):
+        resp = self._request_with_relogin(
+            "DELETE",
+            f"https://api.vrchat.cloud/api/1/instances/{instance.world_id}:{instance.instance_id}",
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        logging.debug(json.dumps(data, indent=2, ensure_ascii=False))
+        return InstanceInfo(**data)
+
     def get_group_posts(self, group_id: str) -> dict:
         resp = self._request_with_relogin(
             "GET", f"{self.config.BASE_URL}/groups/{group_id}/posts"
