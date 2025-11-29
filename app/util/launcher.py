@@ -88,7 +88,7 @@ class VRCLauncher:
 
         # Target instance
         if options.instance:
-            args.append(self._build_launch_url(options.instance))
+            args.append(self.get_launch_url(options.instance))
 
         # Basic options
         if options.no_vr:
@@ -213,7 +213,7 @@ class VRCLauncher:
             return None
         return None
 
-    def _build_launch_url(self, instance: InstanceInfo) -> str:
+    def get_launch_url(self, instance: InstanceInfo) -> str:
         return (
             f"vrchat://launch?"
             f"ref=VRCQuickLauncher"
