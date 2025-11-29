@@ -23,6 +23,7 @@ class OscConfig:
 @dataclass(frozen=True)
 class LaunchOptions:
     instance: Optional[InstanceInfo] = None
+    profile: Optional[int] = None
     no_vr: bool = True
     fps: Optional[int] = None
     midi: Optional[str] = None
@@ -56,13 +57,13 @@ class VRCLauncher:
 
     def __init__(
         self,
-        profile: int,
+        profile: Optional[int] = None,
         launcher_path: Path = LAUNCHER_PATH,
         launch_timeout: int = LAUNCH_TIMEOUT,
         manage_process: bool = True,
     ):
         self.launcher_path: Path = launcher_path
-        self.profile: int = profile
+        self.profile: Optional[int] = profile
         self.launch_timeout: int = launch_timeout
         self.manage_process: bool = manage_process
         self._proc: Optional[ProcessIdentity] = None
@@ -76,7 +77,14 @@ class VRCLauncher:
             self._rollup_exist_process()
 
     def launch(self, options: LaunchOptions):
-        args = [str(self.launcher_path), f"--profile={self.profile}"]
+        args = [str(self.launcher_path)]
+
+        if options.profile:
+            args.append(f"--profile={options.profile}")
+        elif self.profile:
+            args.append(f"--profile={self.profile}")
+        else:
+            args.append("--profile=0")
 
         # Target instance
         if options.instance:
@@ -128,9 +136,9 @@ class VRCLauncher:
                     logging.error("VRChat.exe was not detected after launch")
                     return
 
-            logging.info(
-                f"VRChat started and attached (PID={self._proc.pid}) for profile No.{self.profile}"
-            )
+                logging.info(
+                    f"VRChat started and attached (PID={self._proc.pid}) for profile No.{self.profile}"
+                )
         except Exception as e:
             logging.error(f"Failed to launch VRChat: {e}")
 
