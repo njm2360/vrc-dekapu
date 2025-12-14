@@ -4,14 +4,13 @@ from tkinter import messagebox
 from typing import Callable, Optional
 from dataclasses import dataclass
 
-from app.const.group import GROUPNAME_MAP, INSTANCE_NAME_LIST
+from app.const.group import INSTANCE_NAME_LIST
 from app.model.vrchat import GroupRole
 
 
 @dataclass(frozen=True)
 class CreateInstanceInput:
     display_name: Optional[str]
-    group_id: str
     role_ids: Optional[list[str]]
     queue_enabled: bool
 
@@ -20,7 +19,8 @@ class CreateInstanceDialog(tk.Toplevel):
     def __init__(
         self,
         parent,
-        get_group_roles: Callable[[str], list[GroupRole]],
+        group_id: str,
+        get_group_roles_fn: Callable[[str], list[GroupRole]],
     ):
         super().__init__(parent)
         self.title("新規インスタンス作成")
@@ -30,32 +30,19 @@ class CreateInstanceDialog(tk.Toplevel):
         self.result: Optional[CreateInstanceInput] = None
         self.columnconfigure(0, weight=1)
 
-        self._get_group_roles = get_group_roles
-        self._roles_cache: dict[str, list[GroupRole]] = {}
-
-        # グループ選択
-        ttk.Label(self, text="グループ").grid(
-            row=0, column=0, padx=10, pady=(10, 2), sticky="w"
-        )
-
-        self.group_combo = ttk.Combobox(
-            self, values=list(GROUPNAME_MAP.keys()), state="readonly"
-        )
-        self.group_combo.current(0)
-        self.group_combo.grid(row=1, column=0, padx=10, sticky="ew")
-        self.group_combo.bind("<<ComboboxSelected>>", self._on_group_changed)
-
-        self.after(0, self._load_roles)
+        self._group_id = group_id
+        self._get_group_roles_fn = get_group_roles_fn
+        self._roles_cache: Optional[list[GroupRole]] = None
 
         # 表示名
         ttk.Label(self, text="表示名").grid(
-            row=2, column=0, padx=10, pady=(10, 2), sticky="w"
+            row=0, column=0, padx=10, pady=(10, 2), sticky="w"
         )
 
         self.name_mode = tk.StringVar(value="none")
 
         name_radio = ttk.Frame(self)
-        name_radio.grid(row=3, column=0, padx=10, sticky="w")
+        name_radio.grid(row=1, column=0, padx=10, sticky="w")
 
         ttk.Radiobutton(
             name_radio,
@@ -85,20 +72,20 @@ class CreateInstanceDialog(tk.Toplevel):
             self, values=INSTANCE_NAME_LIST, state="disabled"
         )
         self.name_combo.current(0)
-        self.name_combo.grid(row=4, column=0, padx=10, sticky="ew")
+        self.name_combo.grid(row=2, column=0, padx=10, sticky="ew")
 
         self.name_entry = ttk.Entry(self, state="disabled")
-        self.name_entry.grid(row=5, column=0, padx=10, sticky="ew")
+        self.name_entry.grid(row=3, column=0, padx=10, sticky="ew")
 
         # 待機列設定
         self.queue_var = tk.BooleanVar(value=True)
         ttk.Checkbutton(self, text="待機列", variable=self.queue_var).grid(
-            row=6, column=0, padx=10, pady=(8, 0), sticky="w"
+            row=4, column=0, padx=10, pady=(8, 0), sticky="w"
         )
 
         # ロール設定
         role_frame = ttk.LabelFrame(self, text="ロール")
-        role_frame.grid(row=7, column=0, padx=10, pady=(10, 0), sticky="ew")
+        role_frame.grid(row=5, column=0, padx=10, pady=(10, 0), sticky="ew")
 
         self.role_listbox = tk.Listbox(role_frame, height=5)
         self.role_listbox.grid(row=0, column=0, columnspan=2, sticky="ew")
@@ -110,11 +97,10 @@ class CreateInstanceDialog(tk.Toplevel):
             row=1, column=1, pady=5, sticky="ew"
         )
 
-        self._all_roles: list[GroupRole] = []
         self._assigned_role_ids: list[str] = []
 
         btn_frame = ttk.Frame(self)
-        btn_frame.grid(row=8, column=0, pady=12)
+        btn_frame.grid(row=6, column=0, pady=12)
 
         ttk.Button(btn_frame, text="OK", command=self._ok).grid(row=0, column=0, padx=5)
         ttk.Button(btn_frame, text="キャンセル", command=self.destroy).grid(
@@ -123,27 +109,15 @@ class CreateInstanceDialog(tk.Toplevel):
 
         self._update_name_state()
 
-    def _on_group_changed(self, _):
-        self._assigned_role_ids.clear()
-        self.role_listbox.delete(0, tk.END)
-        self._load_roles()
-
-    def _load_roles(self):
-        group_label = self.group_combo.get()
-        group_id = GROUPNAME_MAP[group_label]
-
-        if group_id in self._roles_cache:
-            self._all_roles = self._roles_cache[group_id]
-            return
-
-        roles = self._get_group_roles(group_id)
-        self._roles_cache[group_id] = roles
-        self._all_roles = roles
+    def _load_roles(self) -> list[GroupRole]:
+        if self._roles_cache is None:
+            self._roles_cache = self._get_group_roles_fn(self._group_id)
+        return self._roles_cache
 
     def _add_role(self):
-        available_roles = [
-            r for r in self._all_roles if r.id not in self._assigned_role_ids
-        ]
+        roles = self._load_roles()
+
+        available_roles = [r for r in roles if r.id not in self._assigned_role_ids]
         if not available_roles:
             messagebox.showinfo(
                 "エラー",
@@ -214,14 +188,10 @@ class CreateInstanceDialog(tk.Toplevel):
                 return
             display_name = value
 
-        group_label = self.group_combo.get()
-        group_id = GROUPNAME_MAP[group_label]
-
         self.result = CreateInstanceInput(
-            group_id=group_id,
-            queue_enabled=self.queue_var.get(),
             display_name=display_name,
             role_ids=self._assigned_role_ids.copy(),
+            queue_enabled=self.queue_var.get(),
         )
 
         self.destroy()

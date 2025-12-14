@@ -150,14 +150,20 @@ class InstanceViewerApp:
 
     # -------- Create ----------
     def open_create_dialog(self):
-        dlg = CreateInstanceDialog(self.root, self.inst_ctrl.get_group_roles)
+        dlg = CreateInstanceDialog(
+            self.root,
+            group_id=self.current_group_id,
+            get_group_roles_fn=self.inst_ctrl.get_group_roles,
+        )
         self.root.wait_window(dlg)
 
         if dlg.result is None:
             return
 
         try:
-            inst = self.inst_ctrl.create_instance(dlg.result)
+            inst = self.inst_ctrl.create_instance(
+                group_id=self.current_group_id, input=dlg.result
+            )
         except Exception as e:
             messagebox.showerror("エラー", str(e))
             return

@@ -1,4 +1,6 @@
+from typing import Optional
 from datetime import datetime, timezone
+
 from app.api.vrchat_api import VRChatAPI
 from app.const.group import DEKAPU_WORLD_ID, TZ
 from app.model.instance.create import CreateInstanceConfig
@@ -6,7 +8,6 @@ from app.model.instance_type import InstanceType
 from app.model.region import Region
 from app.model.group_access_type import GroupAccessType
 from app.model.vrchat import GroupRole, InstanceInfo
-from app.ui.dialog.create_instance_dialog import CreateInstanceInput
 from app.util.http import HttpClient
 from app.util.auth import AuthManager
 from app.config import Config
@@ -34,22 +35,27 @@ class VRCService:
     def close_instance(self, inst: InstanceInfo):
         self.api.close_instance(inst)
 
-    def create_instance(self, input: CreateInstanceInput) -> InstanceInfo:
-        display_name = None
-
-        if input.display_name:
+    def create_instance(
+        self,
+        group_id: str,
+        display_name: Optional[str],
+        role_ids: Optional[list[str]],
+        queue_enabled: Optional[bool],
+    ) -> InstanceInfo:
+        if display_name:
             timestamp = (
                 datetime.now(timezone.utc).astimezone(TZ).strftime("%Y%m%d_%H%M%S")
             )
-            display_name = f"{input.display_name}_{timestamp}"
+            display_name = f"{display_name}_{timestamp}"
 
         config = CreateInstanceConfig(
             world_id=DEKAPU_WORLD_ID,
             type=InstanceType.GROUP,
             region=Region.JP,
-            owner_id=input.group_id,
+            owner_id=group_id,
+            role_ids=role_ids,
             group_access_type=GroupAccessType.MEMBER,
-            queue_enabled=input.queue_enabled,
+            queue_enabled=queue_enabled,
             display_name=display_name,
         )
 

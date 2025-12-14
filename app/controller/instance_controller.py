@@ -1,5 +1,5 @@
-from datetime import datetime, timezone
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from app.model.vrchat import GroupRole, InstanceInfo
 from app.service.vrc_service import VRCService
 from app.ui.dialog.create_instance_dialog import CreateInstanceInput
@@ -63,8 +63,13 @@ class InstanceController:
     def get_group_roles(self, group_id: str) -> list[GroupRole]:
         return self.service.get_group_roles(group_id)
 
-    def create_instance(self, input: CreateInstanceInput):
-        return self.service.create_instance(input)
+    def create_instance(self, group_id: str, input: CreateInstanceInput):
+        return self.service.create_instance(
+            group_id=group_id,
+            display_name=input.display_name,
+            role_ids=input.role_ids,
+            queue_enabled=input.queue_enabled,
+        )
 
     def save_session(self):
         self.service.save_session()
