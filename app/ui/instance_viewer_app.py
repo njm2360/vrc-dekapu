@@ -1,29 +1,27 @@
-from datetime import datetime
 import logging
 import tkinter as tk
 import tkinter.font as tkFont
 from tkinter import ttk, messagebox
-from app.controller.instance_controller import InstanceController
-from app.controller.osc_controller import OSCController
+
+from app.const.group import GROUPNAME_MAP
 from app.model.vrchat import InstanceInfo
 from app.ui.header_view import HeaderView
-from app.ui.osc_view import OSCView
 from app.ui.instance_table_view import InstanceTableView
 from app.ui.dialog.create_instance_dialog import CreateInstanceDialog
 from app.ui.dialog.launch_confirm_dialog import LaunchConfirmDialog
+from app.controller.instance_controller import InstanceController
 
 
 class InstanceViewerApp:
     def __init__(self, root: tk.Tk):
         self.root = root
-        self.root.title("ブッパ連合管理ツール")
+        self.root.title("グループインスタンス管理ツール")
 
         f = tkFont.nametofont("TkDefaultFont")
         f.configure(family="Yu Gothic UI", size=10)
 
         try:
             self.inst_ctrl = InstanceController()
-            self.osc_ctrl = OSCController()
         except Exception as e:
             messagebox.showerror("エラー", str(e))
             root.destroy()
@@ -31,7 +29,10 @@ class InstanceViewerApp:
 
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
         self.create_widgets()
-        self.update_instances()
+
+        group_name = self.header.group_combo.get()
+        self.current_group_id = GROUPNAME_MAP[group_name]
+        self.update_instances(refresh=True)
 
     def on_close(self):
         try:
@@ -41,40 +42,33 @@ class InstanceViewerApp:
         self.root.destroy()
 
     def create_widgets(self):
-        main = ttk.Frame(self.root, padding=10)
+        main = ttk.Frame(self.root, padding=5)
         main.grid(row=0, column=0, sticky="nsew")
 
         self.root.rowconfigure(0, weight=1)
         self.root.columnconfigure(0, weight=1)
 
         main.rowconfigure(0, weight=0)  # Header
-        main.rowconfigure(1, weight=0)  # OSC
         main.rowconfigure(2, weight=1)  # Table + label
         main.columnconfigure(0, weight=1)
 
         # --- Header ---
         self.header = HeaderView(
             main,
-            on_update=self.update_instances,
+            on_update=lambda: self.update_instances(refresh=True),
             on_launch=self.launch_selected,
             on_create=self.open_create_dialog,
             on_close=self.close_selected,
+            on_group_change=self.on_group_change,
+            group_names=list(GROUPNAME_MAP.keys()),
         )
-        self.header.grid(row=0, column=0, sticky="ew")
+
+        self.header.grid(row=0, column=0, sticky="ew", pady=5)
 
         self.header.profile_entry.insert(0, str(self.inst_ctrl.get_profile()))
         self.header.args_entry.insert(
             0, "--process-priority=2 --main-thread-priority=2"
         )
-
-        # --- OSC ---
-        self.osc = OSCView(
-            main, on_lock=self.send_osc_lock, on_release=self.send_osc_release
-        )
-        self.osc.grid(row=1, column=0, sticky="ew", pady=5)
-
-        self.osc.ip_entry.insert(0, "127.0.0.1")
-        self.osc.port_entry.insert(0, "9000")
 
         # --- Table ---
         self.table = InstanceTableView(main)
@@ -87,18 +81,23 @@ class InstanceViewerApp:
         self.last_updated_label = ttk.Label(main, text="更新日時: -")
         self.last_updated_label.grid(row=3, column=0, sticky="w", pady=(5, 0))
 
-    def update_instances(self):
-        self.table.delete(*self.table.get_children())
+    def update_instances(self, refresh: bool = False):
         try:
-            instances = self.inst_ctrl.update_instances()
+            cache = self.inst_ctrl.get_group_instances(
+                group_id=self.current_group_id,
+                refresh=refresh,
+            )
         except Exception as e:
             messagebox.showerror("エラー", str(e))
             return
 
-        for inst in instances:
+        self.table.delete(*self.table.get_children())
+
+        for inst in cache.instances:
             self.table.insert(
                 "",
                 tk.END,
+                iid=inst.id,
                 values=(
                     inst.display_name or inst.name,
                     inst.user_count,
@@ -110,60 +109,61 @@ class InstanceViewerApp:
                 ),
             )
 
-        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        self.last_updated_label.config(text=f"更新日時：{now}")
-
-    def get_selected_index(self):
-        sel = self.table.selection()
-        if not sel:
-            messagebox.showwarning("警告", "インスタンスを選択してください")
-            return None
-        return self.table.index(sel[0])
+        self.last_updated_label.config(
+            text=f"更新日時：{cache.updated_at.strftime('%Y-%m-%d %H:%M:%S')}"
+        )
 
     def launch_selected(self):
-        idx = self.get_selected_index()
-        if idx is None:
+        group_id = self.current_group_id
+        id = self._get_selected_id()
+        inst = self.inst_ctrl.get_instance_by_id(group_id, id)
+
+        if inst.closed_at:
+            messagebox.showerror("エラー", "すでにクローズされています")
             return
+
         profile = int(self.header.profile_entry.get())
         args = self.header.args_entry.get().split()
-        try:
-            self.inst_ctrl.launch_instance_by_index(idx, profile, args)
-        except Exception as e:
-            messagebox.showerror("エラー", str(e))
+
+        self.confirm_instance_launch(inst, profile, args)
 
     def close_selected(self):
-        idx = self.get_selected_index()
-        if idx is None:
-            return
-        name = self.inst_ctrl.get_instance_name(idx)
+        group_id = self.current_group_id
+        id = self._get_selected_id()
+        inst = self.inst_ctrl.get_instance_by_id(group_id, id)
 
+        if inst.closed_at:
+            messagebox.showerror("エラー", "すでにクローズされています")
+            return
+
+        name = inst.display_name or inst.name
         if not messagebox.askyesno(
             "確認", f"インスタンスをクローズしますか？\n\n名前: {name}"
         ):
             return
+
         try:
-            self.inst_ctrl.close_instance(idx)
+            self.inst_ctrl.close_instance(inst)
             messagebox.showinfo("完了", "インスタンスをクローズしました")
         except Exception as e:
             messagebox.showerror("エラー", str(e))
 
     # -------- Create ----------
     def open_create_dialog(self):
-        dlg = CreateInstanceDialog(self.root)
+        dlg = CreateInstanceDialog(self.root, self.inst_ctrl.get_group_roles)
         self.root.wait_window(dlg)
 
         if dlg.result is None:
             return
 
-        name = dlg.result
-        profile = int(self.header.profile_entry.get())
-        args = self.header.args_entry.get().split()
-
         try:
-            inst = self.inst_ctrl.create_instance(name)
+            inst = self.inst_ctrl.create_instance(dlg.result)
         except Exception as e:
             messagebox.showerror("エラー", str(e))
             return
+
+        profile = int(self.header.profile_entry.get())
+        args = self.header.args_entry.get().split()
 
         self.confirm_instance_launch(inst, profile, args)
 
@@ -175,7 +175,7 @@ class InstanceViewerApp:
 
         if dlg.result == "launch":
             try:
-                self.inst_ctrl.launch_instance(inst, profile, args)
+                self.inst_ctrl.launch(inst, profile, args)
             except Exception as e:
                 messagebox.showerror("エラー", str(e))
 
@@ -189,19 +189,19 @@ class InstanceViewerApp:
             except Exception as e:
                 messagebox.showerror("エラー", str(e))
 
-    # -------- OSC ----------
-    def send_osc_lock(self):
-        ip = self.osc.ip_entry.get()
-        try:
-            port = int(self.osc.port_entry.get())
-            self.osc_ctrl.lock(ip, port)
-        except Exception as e:
-            messagebox.showerror("エラー", str(e))
+    def on_group_change(self, _):
+        group_name = self.header.group_var.get()
+        group_id = GROUPNAME_MAP[group_name]
 
-    def send_osc_release(self):
-        ip = self.osc.ip_entry.get()
-        try:
-            port = int(self.osc.port_entry.get())
-            self.osc_ctrl.release(ip, port)
-        except Exception as e:
-            messagebox.showerror("エラー", str(e))
+        if self.current_group_id == group_id:
+            return
+
+        self.current_group_id = group_id
+        self.update_instances(refresh=False)
+
+    def _get_selected_id(self):
+        sel = self.table.selection()
+        if not sel:
+            messagebox.showwarning("警告", "インスタンスを選択してください")
+            return None
+        return sel[0]  # inst.id

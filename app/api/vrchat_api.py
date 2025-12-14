@@ -8,6 +8,7 @@ from app.util.http import HttpClient
 from app.util.auth import AuthManager
 from app.model.vrchat import (
     GroupPostInfo,
+    GroupRole,
     UserInfo,
     GroupInstance,
     InstanceInfo,
@@ -47,6 +48,14 @@ class VRChatAPI:
         data = resp.json()
         logging.debug(json.dumps(data, indent=2, ensure_ascii=False))
         return [GroupInstance(**gi) for gi in data]
+
+    def get_group_roles(self, group_id: str) -> list[GroupRole]:
+        resp = self._request_with_relogin(
+            "GET", f"{self.config.BASE_URL}/groups/{group_id}/roles"
+        )
+        data = resp.json()
+        logging.debug(json.dumps(data, indent=2, ensure_ascii=False))
+        return [GroupRole(**gr) for gr in data]
 
     def get_instance_info(self, world_id: str, instance_id: str) -> InstanceInfo:
         resp = self._request_with_relogin(

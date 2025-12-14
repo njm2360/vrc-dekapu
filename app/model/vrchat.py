@@ -128,6 +128,13 @@ class GroupInstance(BaseModel):
     world: WorldInfo  # ワールド情報
 
 
+class GroupRole(BaseModel):
+    id: str = Field(..., alias="id")
+    name: str = Field(..., alias="name")
+    description: str = Field(..., alias="description")
+    permissions: list = Field(..., alias="permissions")
+
+
 class WorldsInfo(WorldInfo):
     occupants: int  # 現在の総ユーザー数
     private_occupants: int = Field(
