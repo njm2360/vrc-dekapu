@@ -13,4 +13,4 @@ class InstanceTableView(ttk.Treeview):
 
         self.column("name", width=140, anchor=tk.W)
         self.column("count", width=10, anchor=tk.CENTER)
-        self.column("closed", width=100, anchor=tk.CENTER)
+        self.column("closed", width=80, anchor=tk.CENTER)

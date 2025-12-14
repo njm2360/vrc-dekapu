@@ -1,3 +1,6 @@
+from zoneinfo import ZoneInfo
+
+
 DEKAPU_WORLD_ID = "wrld_1af53798-92a3-4c3f-99ae-a7c42ec6084d"
 
 DKPSKL_GROUP_ID = "grp_f664b62c-df1a-4ad4-a1df-2b9df679bc04"
@@ -21,3 +24,5 @@ GROUPNAME_MAP = {
     "ブッパ連合": DKPSKL_GROUP_ID,
     "ブッパ会": SKILL_GROUP_ID,
 }
+
+TZ = ZoneInfo("Asia/Tokyo")

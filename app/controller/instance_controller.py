@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from dataclasses import dataclass
 from app.model.vrchat import GroupRole, InstanceInfo
 from app.service.vrc_service import VRCService
@@ -38,7 +38,7 @@ class InstanceController:
 
         result = InstanceCache(
             instances=instances,
-            updated_at=datetime.now(),
+            updated_at=datetime.now(timezone.utc),
         )
         self.instances_by_group[group_id] = result
         return result

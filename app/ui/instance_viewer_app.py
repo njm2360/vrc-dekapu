@@ -3,7 +3,7 @@ import tkinter as tk
 import tkinter.font as tkFont
 from tkinter import ttk, messagebox
 
-from app.const.group import GROUPNAME_MAP
+from app.const.group import GROUPNAME_MAP, TZ
 from app.model.vrchat import InstanceInfo
 from app.ui.header_view import HeaderView
 from app.ui.instance_table_view import InstanceTableView
@@ -102,7 +102,7 @@ class InstanceViewerApp:
                     inst.display_name or inst.name,
                     inst.user_count,
                     (
-                        inst.closed_at.strftime("%Y-%m-%d %H:%M")
+                        inst.closed_at.astimezone(TZ).strftime("%Y-%m-%d %H:%M")
                         if inst.closed_at
                         else "-"
                     ),
@@ -110,7 +110,7 @@ class InstanceViewerApp:
             )
 
         self.last_updated_label.config(
-            text=f"更新日時：{cache.updated_at.strftime('%Y-%m-%d %H:%M:%S')}"
+            text=f"更新日時：{cache.updated_at.astimezone(TZ).strftime('%Y-%m-%d %H:%M:%S')}"
         )
 
     def launch_selected(self):

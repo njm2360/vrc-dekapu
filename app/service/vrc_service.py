@@ -1,6 +1,6 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from app.api.vrchat_api import VRChatAPI
-from app.const.group import DEKAPU_WORLD_ID
+from app.const.group import DEKAPU_WORLD_ID, TZ
 from app.model.instance.create import CreateInstanceConfig
 from app.model.instance_type import InstanceType
 from app.model.region import Region
@@ -38,7 +38,9 @@ class VRCService:
         display_name = None
 
         if input.display_name:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            timestamp = (
+                datetime.now(timezone.utc).astimezone(TZ).strftime("%Y%m%d_%H%M%S")
+            )
             display_name = f"{input.display_name}_{timestamp}"
 
         config = CreateInstanceConfig(
