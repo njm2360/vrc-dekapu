@@ -1,9 +1,11 @@
 import tkinter as tk
 from tkinter import ttk
 
+from app.model.vrchat import InstanceInfo
+
 
 class LaunchConfirmDialog(tk.Toplevel):
-    def __init__(self, parent, instance_name: str, profile: int):
+    def __init__(self, parent, inst: InstanceInfo, profile: int):
         super().__init__(parent)
         self.title("確認")
         self.resizable(False, False)
@@ -12,6 +14,8 @@ class LaunchConfirmDialog(tk.Toplevel):
         self.result = None  # "launch" / "copy" / None
 
         self.columnconfigure(0, weight=1)
+
+        instance_name = inst.display_name or inst.name
 
         ttk.Label(self, text="以下のインスタンスで起動しますか？").grid(
             row=0, column=0, pady=(10, 5), padx=10

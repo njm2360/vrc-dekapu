@@ -174,9 +174,7 @@ class InstanceViewerApp:
         self.confirm_instance_launch(inst, profile, args)
 
     def confirm_instance_launch(self, inst: InstanceInfo, profile: int, args):
-        dlg = LaunchConfirmDialog(
-            self.root, instance_name=(inst.display_name or inst.name), profile=profile
-        )
+        dlg = LaunchConfirmDialog(self.root, inst=inst, profile=profile)
         self.root.wait_window(dlg)
 
         if dlg.result == "launch":
